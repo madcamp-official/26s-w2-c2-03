@@ -25,12 +25,36 @@ async function getJson(url) {
   return res.json();
 }
 
+async function putJson(url, body) {
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || '저장에 실패했어요');
+  }
+
+  return res.json();
+}
+
 export function generatePlan({ tasks }) {
   return postJson('/api/plan', { tasks });
 }
 
 export function generateDeadlineRoadmap({ title, details, deadline }) {
   return postJson('/api/deadline-tasks', { title, details, deadline });
+}
+
+export function fetchPlannerData() {
+  return getJson('/api/planner-data');
+}
+
+export function savePlannerData({ tasks, events }) {
+  return putJson('/api/planner-data', { tasks, events });
 }
 
 // ---- auth ----

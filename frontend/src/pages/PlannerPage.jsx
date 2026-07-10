@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DailyPlanner from '../components/DailyPlanner.jsx';
 import DeadlinePlanner from '../components/DeadlinePlanner.jsx';
 import CalendarGrid from '../components/CalendarGrid.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { fetchPlannerData, savePlannerData } from '../api.js';
 
 let eventCounter = 1;
 function makeEventId() {
@@ -10,8 +11,46 @@ function makeEventId() {
 }
 
 export default function PlannerPage() {
+  const [tasks, setTasks] = useState([]);
   const [events, setEvents] = useState([]);
+  const [dataReady, setDataReady] = useState(false);
+  const [storageError, setStorageError] = useState(null);
+  const saveQueueRef = useRef(Promise.resolve());
   const { user, logout } = useAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchPlannerData()
+      .then((data) => {
+        if (cancelled) return;
+        setTasks(data.tasks || []);
+        setEvents(data.events || []);
+        setDataReady(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setStorageError(err.message || '저장된 플래너를 불러오지 못했어요');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!dataReady) return undefined;
+
+    const timer = setTimeout(() => {
+      const snapshot = { tasks, events };
+      saveQueueRef.current = saveQueueRef.current
+        .catch(() => {})
+        .then(() => savePlannerData(snapshot))
+        .then(() => setStorageError(null))
+        .catch((err) => setStorageError(err.message || '변경사항을 저장하지 못했어요'));
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [tasks, events, dataReady]);
 
   function addEvent(event) {
     setEvents((prev) => [...prev, { ...event, id: event.id || makeEventId() }]);
@@ -37,9 +76,17 @@ export default function PlannerPage() {
           </div>
         </header>
 
-        <DailyPlanner />
-        <DeadlinePlanner onAddEvent={addEvent} onUpdateEvent={updateEvent} onRemoveEvent={removeEvent} />
-        <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
+        {storageError && <p className="error-text">{storageError}</p>}
+
+        {dataReady ? (
+          <>
+            <DailyPlanner items={tasks} onItemsChange={setTasks} />
+            <DeadlinePlanner onAddEvent={addEvent} onUpdateEvent={updateEvent} onRemoveEvent={removeEvent} />
+            <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
+          </>
+        ) : !storageError ? (
+          <section className="panel"><p className="hint-text">저장된 플래너를 불러오는 중...</p></section>
+        ) : null}
       </div>
     </div>
   );

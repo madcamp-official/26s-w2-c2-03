@@ -7,9 +7,8 @@ function makeId() {
   return `item-${idCounter++}-${Date.now()}`;
 }
 
-export default function DailyPlanner() {
+export default function DailyPlanner({ items, onItemsChange }) {
   const [tasksText, setTasksText] = useState('');
-  const [items, setItems] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -28,7 +27,7 @@ export default function DailyPlanner() {
       const withState = [...planItems]
         .sort((a, b) => a.order - b.order)
         .map((it) => ({ ...it, id: makeId(), done: false }));
-      setItems(withState);
+      onItemsChange(withState);
     } catch (err) {
       setError(err.message || '계획을 만드는 데 실패했어요');
     } finally {
@@ -37,15 +36,15 @@ export default function DailyPlanner() {
   }
 
   function updateItem(id, patch) {
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+    onItemsChange((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
 
   function removeItem(id) {
-    setItems((prev) => withUpdatedOrder(prev.filter((it) => it.id !== id)));
+    onItemsChange((prev) => withUpdatedOrder(prev.filter((it) => it.id !== id)));
   }
 
   function addItem(type) {
-    setItems((prev) => {
+    onItemsChange((prev) => {
       const currentItems = prev || [];
       return [
         ...currentItems,
@@ -64,7 +63,7 @@ export default function DailyPlanner() {
   function moveItem(sourceId, targetId) {
     if (sourceId === targetId) return;
 
-    setItems((prev) => {
+    onItemsChange((prev) => {
       const sourceIndex = prev.findIndex((item) => item.id === sourceId);
       const targetIndex = prev.findIndex((item) => item.id === targetId);
       if (sourceIndex < 0 || targetIndex < 0) return prev;
@@ -77,7 +76,7 @@ export default function DailyPlanner() {
   }
 
   function moveItemBy(id, offset) {
-    setItems((prev) => {
+    onItemsChange((prev) => {
       const sourceIndex = prev.findIndex((item) => item.id === id);
       const targetIndex = sourceIndex + offset;
       if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= prev.length) return prev;
