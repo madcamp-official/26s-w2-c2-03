@@ -2,33 +2,56 @@ import { useState } from 'react';
 import { generateDeadlineRoadmap } from '../api.js';
 import { formatDate } from '../utils/formatDate.js';
 
-let stepCounter = 1;
-function makeStepId() {
-  return `step-${stepCounter++}-${Date.now()}`;
+let idCounter = 1;
+function makeId(prefix) {
+  return `${prefix}-${idCounter++}-${Date.now()}`;
 }
 
-export default function DeadlinePlanner({ onAddEvent, onRemoveEvent }) {
-  const [description, setDescription] = useState('');
+export default function DeadlinePlanner({ onAddEvent, onUpdateEvent, onRemoveEvent }) {
+  const [title, setTitle] = useState('');
+  const [details, setDetails] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
   const [deadline, setDeadline] = useState('');
   const [roadmap, setRoadmap] = useState(null);
+  const [needsMoreInfo, setNeedsMoreInfo] = useState(false);
+  const [lastEventId, setLastEventId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!description.trim() || !deadline) return;
+    if (!title.trim() || !deadline) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await generateDeadlineRoadmap({ description, deadline });
-      onAddEvent({ title: result.eventName, date: deadline, kind: 'deadline' });
+      const result = await generateDeadlineRoadmap({ title, details, deadline });
+
+      if (lastEventId) {
+        // 설명을 추가해서 다시 만드는 경우 — 새 이벤트를 또 추가하지 않고 기존 걸 갱신
+        onUpdateEvent(lastEventId, { title: result.eventName, date: deadline });
+      } else {
+        const eventId = makeId('deadline');
+        onAddEvent({ id: eventId, title: result.eventName, date: deadline, kind: 'deadline' });
+        setLastEventId(eventId);
+      }
+
       setRoadmap(
         [...result.roadmap]
           .sort((a, b) => a.order - b.order)
-          .map((step) => ({ ...step, id: makeStepId(), included: false, calendarEventId: null }))
+          .map((step) => ({ ...step, id: makeId('step'), included: false, calendarEventId: null }))
       );
-      setDescription('');
-      setDeadline('');
+      setNeedsMoreInfo(Boolean(result.needsMoreInfo));
+
+      if (result.needsMoreInfo) {
+        // 정보가 부족했던 경우엔 입력값을 지우지 않고 설명란을 펼쳐서 바로 보완할 수 있게 함
+        setShowDetails(true);
+      } else {
+        setTitle('');
+        setDetails('');
+        setDeadline('');
+        setShowDetails(false);
+        setLastEventId(null);
+      }
     } catch (err) {
       setError(err.message || '로드맵을 만드는 데 실패했어요');
     } finally {
@@ -62,14 +85,31 @@ export default function DeadlinePlanner({ onAddEvent, onRemoveEvent }) {
       </div>
 
       <form className="task-input" onSubmit={handleSubmit}>
-        <label className="field-label" htmlFor="deadline-desc">언제까지 마감인 태스크가 있나요?</label>
+        <label className="field-label" htmlFor="deadline-title">언제까지 마감인 태스크가 있나요?</label>
         <input
-          id="deadline-desc"
+          id="deadline-title"
           type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
           placeholder="예: 디자인 리뷰 공유"
         />
+
+        {showDetails ? (
+          <>
+            <label className="field-label" htmlFor="deadline-details">이 태스크는 어떤 일인가요? (선택)</label>
+            <textarea
+              id="deadline-details"
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder="예: 새 온보딩 플로우 디자인 3안을 팀 리뷰 받고 하나로 확정하기"
+              rows={2}
+            />
+          </>
+        ) : (
+          <button type="button" className="btn-link" onClick={() => setShowDetails(true)}>
+            + 자세히 적기 (선택)
+          </button>
+        )}
 
         <label className="field-label" htmlFor="deadline-datetime">마감 날짜와 시간</label>
         <input
@@ -82,7 +122,7 @@ export default function DeadlinePlanner({ onAddEvent, onRemoveEvent }) {
         <button
           type="submit"
           className="btn-primary"
-          disabled={loading || !description.trim() || !deadline}
+          disabled={loading || !title.trim() || !deadline}
         >
           {loading ? '로드맵 만드는 중...' : '캘린더에 등록하고 로드맵 만들기'}
         </button>
@@ -90,7 +130,21 @@ export default function DeadlinePlanner({ onAddEvent, onRemoveEvent }) {
 
       {error && <p className="error-text">{error}</p>}
 
-      {roadmap && (
+      {loading && (
+        <div className="roadmap-list">
+          <div className="skeleton-row" />
+          <div className="skeleton-row" />
+          <div className="skeleton-row" />
+        </div>
+      )}
+
+      {!loading && needsMoreInfo && (
+        <p className="hint-text">
+          태스크 이름만으로는 정보가 부족해서 로드맵이 일반적으로 나왔어요. 위에 설명을 추가하고 다시 만들면 더 정확해져요.
+        </p>
+      )}
+
+      {!loading && roadmap && (
         <div className="roadmap-list">
           <p className="field-label">로드맵 — 캘린더에 등록할 단계를 선택하세요</p>
           {roadmap.map((step) => (

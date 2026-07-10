@@ -37,7 +37,7 @@ export default function PlannerPage() {
         </header>
 
         <DailyPlanner />
-        <DeadlinePlanner onAddEvent={addEvent} onRemoveEvent={removeEvent} />
+        <DeadlinePlanner onAddEvent={addEvent} onUpdateEvent={updateEvent} onRemoveEvent={removeEvent} />
         <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
       </div>
     </div>
