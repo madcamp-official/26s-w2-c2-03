@@ -63,6 +63,39 @@ const PLAN_CHAT_SCHEMA = {
 // 되묻는 경우에 대비한 안전장치로 프롬프트에 강제 지시를 덧붙인다.
 const FORCE_FINALIZE_NOTE = '\n\n지금은 이미 두 번 되물은 상태입니다. 더 이상 질문하지 말고, 지금까지 들은 정보로 최선을 다해 반드시 계획을 완성하세요. needsClarification은 false로 설정하세요.';
 
+function parseTimeToMinutes(time) {
+  if (!time || typeof time !== 'string') return null;
+  const m = /^([0-2]?\d):([0-5]\d)$/.exec(time.trim());
+  if (!m) return null;
+  const hours = Number(m[1]);
+  if (hours > 23) return null;
+  return hours * 60 + Number(m[2]);
+}
+
+function minutesToTime(totalMinutes) {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = Math.round(normalized % 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// 모델이 지시를 놓쳐서 일부 항목의 startTime을 비워 보내는 경우에 대비한
+// 안전장치 — 없는 항목은 바로 앞 항목이 끝나는 시각에 이어 붙이고, 첫 항목도
+// 없으면 지금 시각부터 시작하는 것으로 채운다. 이게 없으면 시간표(DayWheel)가
+// 아무것도 그리지 못하는 채로 대화가 끝나버린다.
+function backfillStartTimes(items) {
+  const now = new Date();
+  let cursorMinutes = now.getHours() * 60 + now.getMinutes();
+
+  return items.map((it) => {
+    const parsedStart = parseTimeToMinutes(it.startTime);
+    const startMinutes = parsedStart !== null ? parsedStart : cursorMinutes;
+    const duration = Number.isFinite(it.targetMinutes) ? it.targetMinutes : 0;
+    cursorMinutes = startMinutes + duration;
+    return { ...it, startTime: minutesToTime(startMinutes) };
+  });
+}
+
 export async function generateDailyPlanChat({ messages, forceFinalize }) {
   const contents = messages.map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
@@ -81,8 +114,18 @@ export async function generateDailyPlanChat({ messages, forceFinalize }) {
   });
 
   const parsed = JSON.parse(response.text);
+
   if (!parsed.needsClarification) {
-    return { done: true, items: parsed.items, dayEndTime: parsed.dayEndTime || null };
+    // 모델이 "완료"라고 했는데 항목이 비어있는 경우가 실제로 관측됨 — 이대로
+    // 넘기면 프론트가 빈 계획에 갇혀서 대화가 멈춰버리므로, 한 번 더
+    // 구체적으로 물어보게 만든다.
+    if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
+      return {
+        done: false,
+        question: '오늘 하려는 일을 아직 충분히 파악하지 못했어요. 조금 더 구체적으로 다시 말씀해주시겠어요?',
+      };
+    }
+    return { done: true, items: backfillStartTimes(parsed.items), dayEndTime: parsed.dayEndTime || null };
   }
   return { done: false, question: parsed.question };
 }

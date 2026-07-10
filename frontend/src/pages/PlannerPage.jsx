@@ -17,6 +17,25 @@ function navLinkClassName({ isActive }) {
 // 이 시간만큼 여유를 두고서야 실제로 초기화한다.
 const CLOSE_GRACE_MINUTES = 30;
 
+// John이 "롤토체스 2시간 하고 잠에 들 거야"처럼 밤 시간대에 대화하면
+// dayEndTime이 자정을 넘긴 값(예: "00:40")으로 나올 수 있다. 이걸 무조건
+// "오늘 날짜의 00:40"으로 보면, 저녁에 대화했는데 이미 몇 시간 전에 지난
+// 것처럼 계산되어 방금 만든 계획이 바로 초기화되어버린다. 새벽 시간대
+// (0~5시)인데 지금이 이미 그 시각을 지난 저녁/밤이라면, 자정을 넘겨서
+// "내일 새벽"을 뜻하는 것으로 보고 날짜를 하루 미룬다.
+function resolveDayEndDate(time) {
+  const [h, m] = time.split(':').map(Number);
+  const now = new Date();
+  if (Number.isNaN(h) || Number.isNaN(m)) return toDateKey(now);
+
+  const candidate = new Date();
+  candidate.setHours(h, m, 0, 0);
+  if (h < 6 && candidate < now) {
+    candidate.setDate(candidate.getDate() + 1);
+  }
+  return toDateKey(candidate);
+}
+
 function shouldCloseDay(dayEndDate, dayEndTime) {
   if (!dayEndDate || !dayEndTime) return false;
   const todayKey = toDateKey(new Date());
@@ -128,7 +147,7 @@ export default function PlannerPage() {
 
   function setDayEnd(time) {
     setDayEndTime(time);
-    setDayEndDate(time ? toDateKey(new Date()) : null);
+    setDayEndDate(time ? resolveDayEndDate(time) : null);
   }
 
   return (
