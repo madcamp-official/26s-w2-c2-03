@@ -75,6 +75,7 @@ export default function DailyPlanner({ items, onItemsChange }) {
     });
   }
 
+<<<<<<< HEAD
   function moveItemBy(id, offset) {
     onItemsChange((prev) => {
       const sourceIndex = prev.findIndex((item) => item.id === id);
@@ -87,6 +88,8 @@ export default function DailyPlanner({ items, onItemsChange }) {
     });
   }
 
+=======
+>>>>>>> a0f076eed2877f045eba2a6f42134deb1ea31e68
   function handleDrop(e, targetId) {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('text/plain');
@@ -119,17 +122,13 @@ export default function DailyPlanner({ items, onItemsChange }) {
 
       {items && (
         <div className="checklist">
-          {items.map((item, index) => (
+          {items.map((item) => (
             <ChecklistRow
               key={item.id}
               item={item}
-              isFirst={index === 0}
-              isLast={index === items.length - 1}
               isDragOver={dragOverId === item.id}
               onUpdate={(patch) => updateItem(item.id, patch)}
               onRemove={() => removeItem(item.id)}
-              onMoveUp={() => moveItemBy(item.id, -1)}
-              onMoveDown={() => moveItemBy(item.id, 1)}
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('text/plain', item.id);

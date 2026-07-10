@@ -1,12 +1,8 @@
 export default function ChecklistRow({
   item,
-  isFirst,
-  isLast,
   isDragOver,
   onUpdate,
   onRemove,
-  onMoveUp,
-  onMoveDown,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -52,10 +48,6 @@ export default function ChecklistRow({
         onChange={(e) => onUpdate({ targetMinutes: Number(e.target.value) })}
       />
       <span className="mono unit-label">분</span>
-      <div className="reorder-buttons" aria-label="순서 변경">
-        <button type="button" onClick={onMoveUp} disabled={isFirst} aria-label={`${item.title} 위로 이동`}>↑</button>
-        <button type="button" onClick={onMoveDown} disabled={isLast} aria-label={`${item.title} 아래로 이동`}>↓</button>
-      </div>
       <button type="button" className="row-remove" onClick={onRemove} aria-label="항목 삭제">×</button>
     </div>
   );
