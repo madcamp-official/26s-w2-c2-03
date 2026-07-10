@@ -41,8 +41,8 @@ async function putJson(url, body) {
   return res.json();
 }
 
-export function generatePlan({ tasks }) {
-  return postJson('/api/plan', { tasks });
+export function generatePlanChat({ messages, forceFinalize }) {
+  return postJson('/api/plan', { messages, forceFinalize });
 }
 
 export function generateDeadlineRoadmap({ title, details, deadline }) {

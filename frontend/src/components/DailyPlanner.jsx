@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { generatePlan } from '../api.js';
+import { generatePlanChat } from '../api.js';
 import ChecklistRow from './ChecklistRow.jsx';
 
 let idCounter = 1;
@@ -7,32 +7,59 @@ function makeId() {
   return `item-${idCounter++}-${Date.now()}`;
 }
 
+const INITIAL_BOT_MESSAGE = '오늘 할 일을 편하게 알려주세요. 짧게 적어도 괜찮아요, 필요하면 제가 한두 가지만 더 물어볼게요.';
+
 export default function DailyPlanner({ items, onItemsChange }) {
-  const [tasksText, setTasksText] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState('');
   const [dragOverId, setDragOverId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [planDone, setPlanDone] = useState(false);
+
+  const questionCount = messages.filter((m) => m.role === 'assistant').length;
 
   function withUpdatedOrder(nextItems) {
     return nextItems.map((item, index) => ({ ...item, order: index + 1 }));
   }
 
-  async function handleSubmit(e) {
+  async function sendMessage(e) {
     e.preventDefault();
-    if (!tasksText.trim()) return;
+    const text = draft.trim();
+    if (!text || loading || planDone) return;
+
+    const nextMessages = [...messages, { role: 'user', text }];
+    setMessages(nextMessages);
+    setDraft('');
     setLoading(true);
     setError(null);
+
     try {
-      const { items: planItems } = await generatePlan({ tasks: tasksText });
-      const withState = [...planItems]
-        .sort((a, b) => a.order - b.order)
-        .map((it) => ({ ...it, id: makeId(), done: false }));
-      onItemsChange(withState);
+      const forceFinalize = questionCount >= 2;
+      const result = await generatePlanChat({ messages: nextMessages, forceFinalize });
+
+      if (result.done) {
+        setMessages((prev) => [...prev, { role: 'assistant', text: '계획을 만들었어요. 아래에서 확인하고 필요하면 직접 수정하세요.' }]);
+        const withState = [...result.items]
+          .sort((a, b) => a.order - b.order)
+          .map((it) => ({ ...it, id: makeId(), done: false }));
+        onItemsChange(withState);
+        setPlanDone(true);
+      } else {
+        setMessages((prev) => [...prev, { role: 'assistant', text: result.question }]);
+      }
     } catch (err) {
-      setError(err.message || '계획을 만드는 데 실패했어요');
+      setError(err.message || '대화를 진행하는 데 실패했어요');
     } finally {
       setLoading(false);
     }
+  }
+
+  function resetChat() {
+    setMessages([]);
+    setDraft('');
+    setError(null);
+    setPlanDone(false);
   }
 
   function updateItem(id, patch) {
@@ -89,19 +116,34 @@ export default function DailyPlanner({ items, onItemsChange }) {
         <h2>오늘의 계획</h2>
       </div>
 
-      <form className="task-input" onSubmit={handleSubmit}>
-        <label className="field-label" htmlFor="daily-tasks">오늘 할 일을 알려주세요</label>
-        <textarea
-          id="daily-tasks"
-          value={tasksText}
-          onChange={(e) => setTasksText(e.target.value)}
-          placeholder="예: 로그인 리팩토링, PR 리뷰, 문서 정리"
-          rows={3}
-        />
-        <button type="submit" className="btn-primary" disabled={loading || !tasksText.trim()}>
-          {loading ? '계획 만드는 중...' : '계획 세우기'}
-        </button>
-      </form>
+      <div className="chat-panel">
+        <div className="chat-log">
+          <div className="chat-bubble chat-bubble-bot">{INITIAL_BOT_MESSAGE}</div>
+          {messages.map((m, i) => (
+            <div key={i} className={`chat-bubble chat-bubble-${m.role === 'user' ? 'user' : 'bot'}`}>
+              {m.text}
+            </div>
+          ))}
+          {loading && <div className="chat-bubble chat-bubble-bot chat-bubble-loading">생각하는 중...</div>}
+        </div>
+
+        {planDone ? (
+          <button type="button" className="btn-link" onClick={resetChat}>새 대화로 다시 계획 짜기</button>
+        ) : (
+          <form className="chat-input-row" onSubmit={sendMessage}>
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="예: 로그인 리팩토링, PR 리뷰, 문서 정리"
+              disabled={loading}
+            />
+            <button type="submit" className="btn-primary" disabled={loading || !draft.trim()}>
+              보내기
+            </button>
+          </form>
+        )}
+      </div>
 
       {error && <p className="error-text">{error}</p>}
 
