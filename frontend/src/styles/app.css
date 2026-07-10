@@ -133,6 +133,26 @@ textarea:focus, input:focus {
 .checklist-row.is-break { border-style: dashed; }
 .checklist-row.is-done { opacity: .55; }
 .checklist-row.is-done .checklist-title-input { text-decoration: line-through; }
+.checklist-row.is-drag-over {
+  border-color: var(--signal-dim);
+  box-shadow: inset 0 2px 0 var(--signal);
+}
+
+.drag-handle {
+  flex: none; padding: 4px 2px;
+  background: none; border: 0; color: var(--text-2);
+  font-size: 18px; line-height: 1; cursor: grab;
+}
+.drag-handle:active { cursor: grabbing; }
+
+.reorder-buttons { display: flex; flex-direction: column; gap: 2px; }
+.reorder-buttons button {
+  width: 22px; height: 18px; padding: 0;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 2px;
+  color: var(--text-2); font-size: 11px; line-height: 1; cursor: pointer;
+}
+.reorder-buttons button:hover:not(:disabled) { border-color: var(--signal-dim); color: var(--text); }
+.reorder-buttons button:disabled { opacity: .3; cursor: default; }
 
 input.checklist-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
 input.checklist-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
