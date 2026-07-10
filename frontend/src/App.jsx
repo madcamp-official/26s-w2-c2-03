@@ -1,39 +1,51 @@
-import { useState } from 'react';
-import DailyPlanner from './components/DailyPlanner.jsx';
-import DeadlinePlanner from './components/DeadlinePlanner.jsx';
-import CalendarGrid from './components/CalendarGrid.jsx';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import LoginPage from './pages/LoginPage.jsx';
+import SignupPage from './pages/SignupPage.jsx';
+import NicknamePage from './pages/NicknamePage.jsx';
+import PlannerPage from './pages/PlannerPage.jsx';
 
-let eventCounter = 1;
-function makeEventId() {
-  return `evt-${eventCounter++}-${Date.now()}`;
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.nickname) return <Navigate to="/nickname" replace />;
+  return children;
+}
+
+function RequireNoNickname({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.nickname) return <Navigate to="/" replace />;
+  return children;
 }
 
 export default function App() {
-  const [events, setEvents] = useState([]);
-
-  function addEvent(event) {
-    setEvents((prev) => [...prev, { ...event, id: event.id || makeEventId() }]);
-  }
-
-  function updateEvent(id, patch) {
-    setEvents((prev) => prev.map((ev) => (ev.id === id ? { ...ev, ...patch } : ev)));
-  }
-
-  function removeEvent(id) {
-    setEvents((prev) => prev.filter((ev) => ev.id !== id));
-  }
-
   return (
-    <div className="page">
-      <div className="wrap">
-        <header className="topbar">
-          <div className="wordmark"><b>FOCUS</b>·LOG</div>
-        </header>
-
-        <DailyPlanner />
-        <DeadlinePlanner onAddEvent={addEvent} onRemoveEvent={removeEvent} />
-        <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route
+            path="/nickname"
+            element={(
+              <RequireNoNickname>
+                <NicknamePage />
+              </RequireNoNickname>
+            )}
+          />
+          <Route
+            path="/"
+            element={(
+              <RequireAuth>
+                <PlannerPage />
+              </RequireAuth>
+            )}
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
