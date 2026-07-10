@@ -1,7 +1,9 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const MODEL = 'gemini-2.5-flash';
+// 'gemini-flash-latest'는 Google이 관리하는 별칭이라, 특정 버전이 나중에
+// deprecated 되어도 코드를 안 고쳐도 최신 flash 모델을 계속 가리킴
+const MODEL = 'gemini-flash-latest';
 
 // ---- 오늘 할 일 → 휴식 포함 계획 ----
 
