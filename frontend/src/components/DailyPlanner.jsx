@@ -123,7 +123,6 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
   return (
     <section className="panel">
       <div className="section-head">
-        <span className="section-num">01</span>
         <h2>오늘의 계획</h2>
       </div>
 
