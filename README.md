@@ -90,14 +90,17 @@ Electron 기반 데스크톱 앱. 메인 프로세스(Node.js, 백엔드 담당)
 
 ### 데이터 구조
 
-Day 1 기준 퀘스트 객체: `{ id, title, targetMinutes, deadline?, order, status }`. Day 3 이후 SQLite에 퀘스트 이력, 1분 단위 활동 집계, 집중 스코어 이력 테이블 추가 예정.
+"오늘 할 일"과 "마감 태스크"는 별개 플로우로 분리됨.
+- 계획 항목(체크리스트): `{ id, type: 'task'|'break', title, targetMinutes, order, done }` — 프론트엔드 상태로만 존재 (Day 3 이후 SQLite로 영속화 예정)
+- 캘린더 이벤트: `{ id, title, date, kind: 'deadline'|'roadmap' }` — 마감 태스크 등록 시 자동 생성되고, 로드맵 단계는 사용자가 선택적으로 추가
 
 ### API / 외부 서비스 연동
 
 | Method / 방식 | Endpoint / 서비스 | 설명 | 요청 | 응답 | 비고 |
 |---|---|---|---|---|---|
-| POST | `/api/quests/decompose` | 오늘 할 일 + 마감 태스크를 LLM으로 퀘스트 분해 | `{ tasks, deadlineTasks }` | `{ quests: [...] }` | 내부적으로 Claude API 호출 |
-| - | Anthropic Claude API | 퀘스트 분해 / 완료 피드백 / 관련성 판정에 사용 | - | - | `backend/.env`의 `ANTHROPIC_API_KEY` 필요 |
+| POST | `/api/plan` | "오늘 할 일"을 휴식 포함 계획으로 분해 | `{ tasks }` | `{ items: [...] }` | 내부적으로 Gemini API 호출 |
+| POST | `/api/deadline-tasks` | 마감 태스크 → 캘린더 이벤트 이름 + 로드맵 생성 | `{ description, deadline }` | `{ eventName, roadmap: [...] }` | 내부적으로 Gemini API 호출 |
+| - | Google Gemini API | 계획 분해 / 로드맵 생성에 사용 | - | - | `backend/.env`의 `GEMINI_API_KEY` 필요 |
 
 ---
 
