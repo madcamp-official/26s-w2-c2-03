@@ -90,6 +90,16 @@ const ROADMAP_SCHEMA = {
   required: ['eventName', 'needsMoreInfo', 'roadmap'],
 };
 
+// deadline(datetime-local, 타임존 표기 없는 로컬시간 문자열)과 형식을 맞춘
+// "지금" 문자열을 만든다. 예전엔 new Date().toISOString()(UTC, 'Z' 붙음)을
+// 그대로 넣었는데, 타임존 표기가 있는 값과 없는 값을 한 프롬프트에 같이
+// 넣으면 LLM이 시차만큼 날짜 계산을 잘못해서(마감을 하루 넘기는 등) 실제로
+// 재현됨 — 같은 "타임존 없는 로컬시간" 형식으로 통일해서 이 문제를 줄인다.
+function toNaiveLocalString(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export async function generateDeadlineRoadmap({ title, details, deadline }) {
   const taskInfo = details && details.trim()
     ? `태스크 이름: ${title}\n태스크 설명: ${details}`
@@ -97,7 +107,7 @@ export async function generateDeadlineRoadmap({ title, details, deadline }) {
 
   const response = await genAI.models.generateContent({
     model: MODEL,
-    contents: `${taskInfo}\n마감 시각: ${deadline}\n현재 시각: ${new Date().toISOString()}`,
+    contents: `${taskInfo}\n마감 시각: ${deadline}\n현재 시각: ${toNaiveLocalString(new Date())}`,
     config: {
       systemInstruction: ROADMAP_SYSTEM_PROMPT,
       responseMimeType: 'application/json',
@@ -106,5 +116,20 @@ export async function generateDeadlineRoadmap({ title, details, deadline }) {
     },
   });
 
-  return JSON.parse(response.text);
+  const result = JSON.parse(response.text);
+
+  // LLM이 프롬프트 지시를 놓쳐서 마감을 넘기는 단계를 만드는 경우에 대비한
+  // 안전장치 — 마감 이후로 잡힌 단계는 마감 시각으로 강제 클램핑한다.
+  const deadlineDate = new Date(deadline);
+  if (!Number.isNaN(deadlineDate.getTime())) {
+    result.roadmap = result.roadmap.map((step) => {
+      const stepDate = new Date(step.suggestedDate);
+      if (!Number.isNaN(stepDate.getTime()) && stepDate.getTime() > deadlineDate.getTime()) {
+        return { ...step, suggestedDate: deadline };
+      }
+      return step;
+    });
+  }
+
+  return result;
 }
