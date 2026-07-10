@@ -28,7 +28,7 @@ export default function NicknamePage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="wordmark"><b>FOCUS</b>·LOG</div>
+        <div className="wordmark"><b>Zone</b>mate</div>
         <h1>어떻게 불러드리면 될까요?</h1>
         <form onSubmit={handleSubmit} className="task-input">
           <label className="field-label" htmlFor="nickname">닉네임</label>

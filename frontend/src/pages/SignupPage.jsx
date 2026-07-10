@@ -50,7 +50,7 @@ export default function SignupPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="wordmark"><b>FOCUS</b>·LOG</div>
+        <div className="wordmark"><b>Zone</b>mate</div>
         <h1>이메일로 가입하기</h1>
 
         {step === 'form' && (

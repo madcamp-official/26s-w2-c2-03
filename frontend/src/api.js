@@ -41,8 +41,8 @@ async function putJson(url, body) {
   return res.json();
 }
 
-export function generatePlan({ tasks }) {
-  return postJson('/api/plan', { tasks });
+export function generatePlanChat({ messages, forceFinalize }) {
+  return postJson('/api/plan', { messages, forceFinalize });
 }
 
 export function generateDeadlineRoadmap({ title, details, deadline }) {
@@ -53,8 +53,16 @@ export function fetchPlannerData() {
   return getJson('/api/planner-data');
 }
 
-export function savePlannerData({ tasks, events }) {
-  return putJson('/api/planner-data', { tasks, events });
+export function savePlannerData({ tasks, events, dayEndTime, dayEndDate }) {
+  return putJson('/api/planner-data', { tasks, events, dayEndTime, dayEndDate });
+}
+
+export function fetchDailyArchive(date) {
+  return getJson(`/api/daily-archives/${date}`);
+}
+
+export function closeDay(date, tasks) {
+  return postJson('/api/daily-archives/close-day', { date, tasks });
 }
 
 // ---- auth ----

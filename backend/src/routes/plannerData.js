@@ -18,7 +18,7 @@ function parseRoadmap(value) {
 function readPlannerData(userId) {
   const tasks = db
     .prepare(`
-      SELECT id, type, title, target_minutes, sort_order, done
+      SELECT id, type, title, target_minutes, start_time, source_event_id, sort_order, done
       FROM planner_tasks
       WHERE user_id = ?
       ORDER BY sort_order ASC, created_at ASC
@@ -31,6 +31,8 @@ function readPlannerData(userId) {
       targetMinutes: row.target_minutes,
       order: row.sort_order,
       done: Boolean(row.done),
+      ...(row.start_time ? { startTime: row.start_time } : {}),
+      ...(row.source_event_id ? { sourceEventId: row.source_event_id } : {}),
     }));
 
   const events = db
@@ -50,7 +52,16 @@ function readPlannerData(userId) {
       ...(row.roadmap_json ? { roadmap: parseRoadmap(row.roadmap_json) } : {}),
     }));
 
-  return { tasks, events };
+  const meta = db
+    .prepare('SELECT day_end_time, day_end_date FROM planner_meta WHERE user_id = ?')
+    .get(userId);
+
+  return {
+    tasks,
+    events,
+    dayEndTime: meta?.day_end_time || null,
+    dayEndDate: meta?.day_end_date || null,
+  };
 }
 
 function validateTasks(tasks) {
@@ -96,14 +107,14 @@ router.get('/', (req, res) => {
 });
 
 router.put('/', (req, res) => {
-  const { tasks, events } = req.body;
+  const { tasks, events, dayEndTime, dayEndDate } = req.body;
   const validationError = validateTasks(tasks) || validateEvents(events);
   if (validationError) return res.status(400).json({ error: validationError });
 
   const insertTask = db.prepare(`
     INSERT INTO planner_tasks
-      (id, user_id, type, title, target_minutes, sort_order, done)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+      (id, user_id, type, title, target_minutes, start_time, source_event_id, sort_order, done)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertEvent = db.prepare(`
     INSERT INTO calendar_events
@@ -123,6 +134,8 @@ router.put('/', (req, res) => {
         task.type,
         task.title,
         task.targetMinutes,
+        task.startTime || null,
+        task.sourceEventId || null,
         index + 1,
         task.done ? 1 : 0,
       );
@@ -139,6 +152,14 @@ router.put('/', (req, res) => {
         event.roadmap ? JSON.stringify(event.roadmap) : null,
       );
     });
+
+    db.prepare(`
+      INSERT INTO planner_meta (user_id, day_end_time, day_end_date)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        day_end_time = excluded.day_end_time,
+        day_end_date = excluded.day_end_date
+    `).run(req.user.id, dayEndTime || null, dayEndDate || null);
 
     db.exec('COMMIT');
     res.json(readPlannerData(req.user.id));

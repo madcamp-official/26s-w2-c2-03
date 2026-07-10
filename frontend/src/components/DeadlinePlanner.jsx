@@ -85,7 +85,6 @@ export default function DeadlinePlanner({ onAddEvent, onUpdateEvent, onRemoveEve
   return (
     <section className="panel">
       <div className="section-head">
-        <span className="section-num">02</span>
         <h2>마감 태스크 등록</h2>
       </div>
 

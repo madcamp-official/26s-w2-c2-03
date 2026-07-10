@@ -36,6 +36,8 @@ db.exec(`
     type TEXT NOT NULL CHECK (type IN ('task', 'break')),
     title TEXT NOT NULL,
     target_minutes INTEGER NOT NULL,
+    start_time TEXT,
+    source_event_id TEXT,
     sort_order INTEGER NOT NULL,
     done INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -58,11 +60,39 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS daily_archives (
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    tasks_json TEXT NOT NULL,
+    archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS planner_meta (
+    user_id TEXT PRIMARY KEY,
+    day_end_time TEXT,
+    day_end_date TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_planner_tasks_user_order
     ON planner_tasks(user_id, sort_order);
 
   CREATE INDEX IF NOT EXISTS idx_calendar_events_user_date
     ON calendar_events(user_id, event_date);
 `);
+
+// planner_tasks에 start_time/source_event_id 컬럼을 나중에 추가했다 —
+// CREATE TABLE IF NOT EXISTS는 이미 만들어진 테이블에는 영향을 주지 않으므로,
+// 기존 DB 파일에는 별도로 ALTER TABLE을 시도한다. 컬럼이 이미 있으면 에러를
+// 무시한다.
+for (const column of ['start_time TEXT', 'source_event_id TEXT']) {
+  try {
+    db.exec(`ALTER TABLE planner_tasks ADD COLUMN ${column}`);
+  } catch {
+    // 컬럼이 이미 존재하는 경우
+  }
+}
 
 export default db;
