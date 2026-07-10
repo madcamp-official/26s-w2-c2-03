@@ -75,21 +75,6 @@ export default function DailyPlanner({ items, onItemsChange }) {
     });
   }
 
-<<<<<<< HEAD
-  function moveItemBy(id, offset) {
-    onItemsChange((prev) => {
-      const sourceIndex = prev.findIndex((item) => item.id === id);
-      const targetIndex = sourceIndex + offset;
-      if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= prev.length) return prev;
-
-      const nextItems = [...prev];
-      [nextItems[sourceIndex], nextItems[targetIndex]] = [nextItems[targetIndex], nextItems[sourceIndex]];
-      return withUpdatedOrder(nextItems);
-    });
-  }
-
-=======
->>>>>>> a0f076eed2877f045eba2a6f42134deb1ea31e68
   function handleDrop(e, targetId) {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('text/plain');
