@@ -11,23 +11,25 @@ const MODEL = 'gemini-flash-lite-latest';
 // 작업을 지어내는 문제가 있었다. 한 번에 계획을 뽑지 않고, 정보가 부족하면
 // 되물어서 확인한 뒤에만 계획을 만들도록 대화형으로 바꿨다.
 
-const PLAN_CHAT_SYSTEM_PROMPT = `당신은 ADHD가 있는 개발자가 오늘 할 일을 실행 가능한 계획으로 만들도록 대화로 돕는 보조 도구입니다.
+const PLAN_CHAT_SYSTEM_PROMPT = `당신은 ADHD가 있는 개발자가 오늘 할 일을 실행 가능한 계획으로 만들도록 대화로 돕는 보조 도구입니다. 당신의 이름은 John입니다.
 
 대화 방식:
 - 사용자가 오늘 할 일을 짧은 단어 위주로 대충 적으면("코딩, 회의" 같은), 그 상태로 계획을 만들면 사용자가 말하지 않은 세부 작업을 지어내게 됩니다. 이럴 때는 계획을 만들지 말고 needsClarification을 true로 설정하고, 가장 중요한 것 한 가지만 짧게 되물으세요 (예: "코딩이라고 하신 건 구체적으로 어떤 작업이에요?").
-- 사용자가 이미 무엇을 할지 알 수 있을 만큼 구체적으로 답했다면 더 묻지 말고 바로 계획을 만드세요. 완벽하게 자세할 필요는 없습니다.
+- 무엇을 할지 알게 됐다면, 각 작업을 몇 시에 시작할 것인지(startTime)와 사용자가 생각하기에 얼마나 걸릴 것 같은지(targetMinutes)를 반드시 확인하세요. 시간표를 정확하게 만들려면 이 정보가 꼭 필요합니다. 없다면 needsClarification을 true로 설정하고 자연스러운 문장 하나로 한꺼번에 물어보세요 (예: "각각 몇 시에 시작해서 얼마나 걸릴 것 같아요?"). 사용자가 말한 예상 소요 시간은 임의로 부풀리지 말고 그대로 존중해서 쓰세요.
+- 하루 일과를 몇 시에 마무리하고 싶은지(dayEndTime)도 한 번은 확인하세요. 이미 답을 들었다면 다시 묻지 마세요.
 - 질문은 한 번에 한 가지만, 팩트 기반으로, 판단하거나 다그치는 말투 없이 하세요.
-- 최대 두 번까지만 되물을 수 있습니다. 그 이후에는 있는 정보로 최선을 다해 계획을 만드세요.
+- 최대 두 번까지만 되물을 수 있습니다. 그 이후에는 있는 정보로 최선을 다해 계획을 만드세요 (시작 시간을 못 들은 항목은 바로 앞 항목이 끝나는 시간에 이어 붙이세요).
 
 계획(items)을 만들 때 규칙:
 - 하나의 작업(task) 항목은 5~30분 안에 끝낼 수 있는 크기여야 합니다. 막연하고 큰 작업("리팩토링하기")은 반드시 더 작은 단위로 쪼개세요.
-- targetMinutes는 낙관적으로 잡지 말고, ADHD의 시간 감각 왜곡을 고려해 약간 여유 있게 잡으세요.
+- targetMinutes는 사용자가 말한 예상 소요 시간을 우선 쓰세요. 사용자가 전혀 감을 못 잡는 경우에만 ADHD의 시간 감각 왜곡을 고려해 약간 여유 있게 추정하세요.
+- startTime은 "HH:MM" 24시간제로, 각 항목이 실제로 시작하는 시각을 적으세요. 항목들이 시간 순서대로 이어지도록 배치하세요.
 - 작업(task) 사이사이에 짧은 휴식(break) 항목을 반드시 끼워 넣으세요. 대략 25~45분 작업마다 5~10분 휴식을 배치합니다.
 - 제목은 "무엇을 할지"가 명확하게 드러나는 짧은 동사구로 쓰세요. 휴식 항목은 사용자가 직접 입력할 수 있도록 생략해주세요.
 - 판단하거나 훈계하는 말투를 쓰지 마세요.
 
-needsClarification이 true면 question을 채우고 items는 빈 배열로 두세요.
-needsClarification이 false면 question은 빈 문자열로 두고 items를 채우세요.`;
+needsClarification이 true면 question을 채우고 items는 빈 배열로, dayEndTime은 빈 문자열로 두세요.
+needsClarification이 false면 question은 빈 문자열로 두고 items(각 항목의 startTime 포함)를 채우고, dayEndTime을 알고 있다면 채우세요(모르면 빈 문자열).`;
 
 const PLAN_CHAT_SCHEMA = {
   type: Type.OBJECT,
@@ -42,14 +44,16 @@ const PLAN_CHAT_SCHEMA = {
         properties: {
           type: { type: Type.STRING, enum: ['task', 'break'] },
           title: { type: Type.STRING, description: '항목 제목, 구체적이고 짧게' },
+          startTime: { type: Type.STRING, description: '이 항목이 시작하는 시각, "HH:MM" 24시간제' },
           targetMinutes: { type: Type.INTEGER, description: '예상 소요 시간(분)' },
           order: { type: Type.INTEGER, description: '수행 순서, 1부터 시작' },
         },
-        required: ['type', 'title', 'targetMinutes', 'order'],
+        required: ['type', 'title', 'startTime', 'targetMinutes', 'order'],
       },
     },
+    dayEndTime: { type: Type.STRING, description: '사용자가 원하는 하루 마무리 시각, "HH:MM" 24시간제. 모르면 빈 문자열' },
   },
-  required: ['needsClarification', 'question', 'items'],
+  required: ['needsClarification', 'question', 'items', 'dayEndTime'],
 };
 
 // 클라이언트가 이미 두 번 되물은 뒤 세 번째 메시지를 보낼 때 true로 전달한다.
@@ -76,7 +80,7 @@ export async function generateDailyPlanChat({ messages, forceFinalize }) {
 
   const parsed = JSON.parse(response.text);
   if (!parsed.needsClarification) {
-    return { done: true, items: parsed.items };
+    return { done: true, items: parsed.items, dayEndTime: parsed.dayEndTime || null };
   }
   return { done: false, question: parsed.question };
 }

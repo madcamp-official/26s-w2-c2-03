@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { generatePlanChat } from '../api.js';
 import ChecklistRow from './ChecklistRow.jsx';
+import BotAvatar from './BotAvatar.jsx';
+import DayWheel from './DayWheel.jsx';
 
 let idCounter = 1;
 function makeId() {
@@ -16,6 +18,8 @@ export default function DailyPlanner({ items, onItemsChange }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [planDone, setPlanDone] = useState(false);
+  const [dayEndTime, setDayEndTime] = useState(null);
+  const [showWheel, setShowWheel] = useState(false);
 
   const questionCount = messages.filter((m) => m.role === 'assistant').length;
 
@@ -43,7 +47,14 @@ export default function DailyPlanner({ items, onItemsChange }) {
         const withState = [...result.items]
           .sort((a, b) => a.order - b.order)
           .map((it) => ({ ...it, id: makeId(), done: false }));
-        onItemsChange(withState);
+        // 2번 항목(마감 태스크) 로드맵에서 자동으로 끼워 넣은 항목
+        // (sourceEventId가 있는 항목)은 John이 새 계획을 짤 때도
+        // 지워지지 않게 남겨둔다.
+        onItemsChange((prev) => {
+          const preserved = (prev || []).filter((it) => it.sourceEventId);
+          return withUpdatedOrder([...withState, ...preserved]);
+        });
+        setDayEndTime(result.dayEndTime || null);
         setPlanDone(true);
       } else {
         setMessages((prev) => [...prev, { role: 'assistant', text: result.question }]);
@@ -60,6 +71,8 @@ export default function DailyPlanner({ items, onItemsChange }) {
     setDraft('');
     setError(null);
     setPlanDone(false);
+    setDayEndTime(null);
+    setShowWheel(false);
   }
 
   function updateItem(id, patch) {
@@ -117,18 +130,46 @@ export default function DailyPlanner({ items, onItemsChange }) {
       </div>
 
       <div className="chat-panel">
+        <div className="chat-persona">
+          <BotAvatar size={36} />
+          <div className="chat-persona-info">
+            <span className="chat-persona-name">John</span>
+            <span className="chat-persona-role">오늘의 계획을 같이 세워주는 보조 도구</span>
+          </div>
+        </div>
+
         <div className="chat-log">
-          <div className="chat-bubble chat-bubble-bot">{INITIAL_BOT_MESSAGE}</div>
-          {messages.map((m, i) => (
-            <div key={i} className={`chat-bubble chat-bubble-${m.role === 'user' ? 'user' : 'bot'}`}>
-              {m.text}
+          <div className="chat-message">
+            <BotAvatar size={22} />
+            <div className="chat-bubble chat-bubble-bot">{INITIAL_BOT_MESSAGE}</div>
+          </div>
+          {messages.map((m, i) =>
+            m.role === 'user' ? (
+              <div key={i} className="chat-message chat-message-user">
+                <div className="chat-bubble chat-bubble-user">{m.text}</div>
+              </div>
+            ) : (
+              <div key={i} className="chat-message">
+                <BotAvatar size={22} />
+                <div className="chat-bubble chat-bubble-bot">{m.text}</div>
+              </div>
+            )
+          )}
+          {loading && (
+            <div className="chat-message">
+              <BotAvatar size={22} />
+              <div className="chat-bubble chat-bubble-bot chat-bubble-loading">생각하는 중...</div>
             </div>
-          ))}
-          {loading && <div className="chat-bubble chat-bubble-bot chat-bubble-loading">생각하는 중...</div>}
+          )}
         </div>
 
         {planDone ? (
-          <button type="button" className="btn-link" onClick={resetChat}>새 대화로 다시 계획 짜기</button>
+          <div className="chat-panel-actions">
+            <button type="button" className="btn-link" onClick={resetChat}>새 대화로 다시 계획 짜기</button>
+            <button type="button" className="btn-ghost" onClick={() => setShowWheel((v) => !v)}>
+              {showWheel ? '시간표 접기' : '시간표 생성하기'}
+            </button>
+          </div>
         ) : (
           <form className="chat-input-row" onSubmit={sendMessage}>
             <input
@@ -143,6 +184,8 @@ export default function DailyPlanner({ items, onItemsChange }) {
             </button>
           </form>
         )}
+
+        {showWheel && <DayWheel items={items || []} dayEndTime={dayEndTime} />}
       </div>
 
       {error && <p className="error-text">{error}</p>}

@@ -18,7 +18,7 @@ function parseRoadmap(value) {
 function readPlannerData(userId) {
   const tasks = db
     .prepare(`
-      SELECT id, type, title, target_minutes, sort_order, done
+      SELECT id, type, title, target_minutes, start_time, source_event_id, sort_order, done
       FROM planner_tasks
       WHERE user_id = ?
       ORDER BY sort_order ASC, created_at ASC
@@ -31,6 +31,8 @@ function readPlannerData(userId) {
       targetMinutes: row.target_minutes,
       order: row.sort_order,
       done: Boolean(row.done),
+      ...(row.start_time ? { startTime: row.start_time } : {}),
+      ...(row.source_event_id ? { sourceEventId: row.source_event_id } : {}),
     }));
 
   const events = db
@@ -102,8 +104,8 @@ router.put('/', (req, res) => {
 
   const insertTask = db.prepare(`
     INSERT INTO planner_tasks
-      (id, user_id, type, title, target_minutes, sort_order, done)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+      (id, user_id, type, title, target_minutes, start_time, source_event_id, sort_order, done)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertEvent = db.prepare(`
     INSERT INTO calendar_events
@@ -123,6 +125,8 @@ router.put('/', (req, res) => {
         task.type,
         task.title,
         task.targetMinutes,
+        task.startTime || null,
+        task.sourceEventId || null,
         index + 1,
         task.done ? 1 : 0,
       );
