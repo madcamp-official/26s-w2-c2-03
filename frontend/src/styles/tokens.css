@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --ground: #F5F1E8;
   --surface: #FFFFFF;
   --surface-2: #EDE6D6;
@@ -15,23 +16,10 @@
   --radius: 3px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #14110D;
-    --surface: #1F1A14;
-    --surface-2: #2A231A;
-    --line: #3A3024;
-    --signal: #E8A33D;
-    --signal-dim: #9C7A46;
-    --signal-ink: #14110D;
-    --noise: #7C8798;
-    --urgent: #E0725F;
-    --text-1: #F2E9DA;
-    --text-2: #B8A98D;
-  }
-}
-
+/* 기본값은 항상 라이트모드 — OS 다크모드 설정과 무관하게 고정.
+   다크모드는 나중에 명시적 토글(data-theme="dark")을 추가하면 사용 가능. */
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --ground: #14110D;
   --surface: #1F1A14;
   --surface-2: #2A231A;
