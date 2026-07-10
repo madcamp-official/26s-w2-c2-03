@@ -223,6 +223,8 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 .calendar-cell {
   background: var(--surface);
   min-height: 84px;
+  min-width: 0; /* grid item 기본값(min-width:auto)이 칩의 nowrap 텍스트 폭만큼
+                   셀을 억지로 늘려서 다른 요일 칸이 밀려 잘리는 문제 방지 */
   padding: 4px;
   display: flex; flex-direction: column; gap: 3px;
 }
@@ -237,14 +239,20 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
   border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
   text-align: center; display: inline-block;
 }
-.calendar-cell-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.calendar-cell-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
 
 .calendar-chip {
   font-size: 10.5px; padding: 2px 6px; border-radius: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  cursor: grab;
+  cursor: grab; min-width: 0;
 }
 .calendar-chip:active { cursor: grabbing; }
+
+.calendar-chip-more {
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-2);
+  padding: 1px 6px; cursor: pointer; background: none; border: none; text-align: left;
+}
+.calendar-chip-more:hover { color: var(--signal); }
 
 .calendar-editor {
   margin-top: 14px; padding: 14px;
@@ -255,4 +263,13 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 .calendar-editor-row input[type="text"],
 .calendar-editor-row input[type="datetime-local"] {
   flex: 1; margin: 0;
+}
+
+.calendar-editor-roadmap {
+  border-top: 1px dashed var(--line); padding-top: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.calendar-editor-roadmap-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 13px; padding: 4px 0;
 }
