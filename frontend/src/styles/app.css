@@ -23,6 +23,18 @@ body {
 
 .topbar-user { display: flex; align-items: center; gap: 10px; }
 
+/* ---- page nav (오늘/마감·캘린더 탭) ---- */
+.page-nav { display: flex; gap: 4px; margin-bottom: 32px; }
+.page-nav-link {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em;
+  text-transform: uppercase; text-decoration: none; color: var(--text-2);
+  padding: 8px 14px; border-radius: var(--radius); border: 1px solid transparent;
+}
+.page-nav-link:hover { color: var(--text-1); }
+.page-nav-link.is-active {
+  color: var(--signal-ink); background: var(--signal); border-color: var(--signal);
+}
+
 /* ---- auth pages ---- */
 .auth-page {
   min-height: 100%; display: flex; align-items: center; justify-content: center;

@@ -4,6 +4,8 @@ import LoginPage from './pages/LoginPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
 import NicknamePage from './pages/NicknamePage.jsx';
 import PlannerPage from './pages/PlannerPage.jsx';
+import TodayPage from './pages/TodayPage.jsx';
+import DeadlinesPage from './pages/DeadlinesPage.jsx';
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -43,7 +45,11 @@ export default function App() {
                 <PlannerPage />
               </RequireAuth>
             )}
-          />
+          >
+            <Route index element={<Navigate to="/today" replace />} />
+            <Route path="today" element={<TodayPage />} />
+            <Route path="deadlines" element={<DeadlinesPage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>

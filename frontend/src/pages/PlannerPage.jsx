@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import DailyPlanner from '../components/DailyPlanner.jsx';
-import DeadlinePlanner from '../components/DeadlinePlanner.jsx';
-import CalendarGrid from '../components/CalendarGrid.jsx';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { fetchPlannerData, savePlannerData } from '../api.js';
 
 let eventCounter = 1;
 function makeEventId() {
   return `evt-${eventCounter++}-${Date.now()}`;
+}
+
+function navLinkClassName({ isActive }) {
+  return `page-nav-link${isActive ? ' is-active' : ''}`;
 }
 
 export default function PlannerPage() {
@@ -76,14 +78,15 @@ export default function PlannerPage() {
           </div>
         </header>
 
+        <nav className="page-nav">
+          <NavLink to="/today" className={navLinkClassName}>오늘의 계획</NavLink>
+          <NavLink to="/deadlines" className={navLinkClassName}>마감 태스크 & 캘린더</NavLink>
+        </nav>
+
         {storageError && <p className="error-text">{storageError}</p>}
 
         {dataReady ? (
-          <>
-            <DailyPlanner items={tasks} onItemsChange={setTasks} />
-            <DeadlinePlanner onAddEvent={addEvent} onUpdateEvent={updateEvent} onRemoveEvent={removeEvent} />
-            <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
-          </>
+          <Outlet context={{ tasks, setTasks, events, addEvent, updateEvent, removeEvent }} />
         ) : !storageError ? (
           <section className="panel"><p className="hint-text">저장된 플래너를 불러오는 중...</p></section>
         ) : null}

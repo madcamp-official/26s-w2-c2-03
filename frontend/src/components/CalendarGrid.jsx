@@ -48,7 +48,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
   return (
     <section className="panel">
       <div className="section-head">
-        <span className="section-num">03</span>
+        <span className="section-num">02</span>
         <h2>캘린더</h2>
       </div>
 
