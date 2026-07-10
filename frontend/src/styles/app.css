@@ -112,7 +112,31 @@ textarea:focus, input:focus {
 }
 .btn-ghost:hover { border-color: var(--signal-dim); color: var(--text-1); }
 
+.btn-link {
+  align-self: flex-start; margin-top: 4px;
+  background: none; border: none; padding: 0;
+  font-family: var(--font-mono); font-size: 12px; color: var(--signal);
+  cursor: pointer; text-decoration: underline;
+}
+
 .error-text { color: var(--urgent); font-size: 13.5px; margin: 10px 0 0; }
+.hint-text { color: var(--text-2); font-size: 13px; margin: 12px 0 0; line-height: 1.5; }
+
+/* ---- loading skeleton ---- */
+.skeleton-row {
+  height: 40px; border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 37%, var(--surface) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-pulse 1.4s ease infinite;
+  margin-bottom: 8px;
+}
+@keyframes skeleton-pulse {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row { animation: none; }
+}
 
 /* ---- type tags (shared) ---- */
 .type-tag {

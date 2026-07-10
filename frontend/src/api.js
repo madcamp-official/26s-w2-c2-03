@@ -29,8 +29,8 @@ export function generatePlan({ tasks }) {
   return postJson('/api/plan', { tasks });
 }
 
-export function generateDeadlineRoadmap({ description, deadline }) {
-  return postJson('/api/deadline-tasks', { description, deadline });
+export function generateDeadlineRoadmap({ title, details, deadline }) {
+  return postJson('/api/deadline-tasks', { title, details, deadline });
 }
 
 // ---- auth ----
