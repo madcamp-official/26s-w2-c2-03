@@ -45,9 +45,18 @@ body {
 textarea, input[type="text"], input[type="number"], input[type="datetime-local"] {
   font-family: var(--font-sans); font-size: 14px; color: var(--text-1);
   background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px 12px; margin-top: 6px; width: 100%;
+  padding: 10px 12px; margin-top: 6px; min-width: 0;
 }
 textarea { resize: vertical; font-family: inherit; }
+/* 폼 안의 입력만 폭 100% — 이 규칙이 없으면 체크리스트/캘린더 행의
+   input[type="text"|"number"] 셀렉터(specificity 0,1,1)가
+   .checklist-title-input 같은 클래스(0,1,0)를 이겨서 flex 크기가 깨짐 */
+.task-input textarea,
+.task-input input[type="text"],
+.task-input input[type="number"],
+.task-input input[type="datetime-local"] {
+  width: 100%;
+}
 textarea:focus, input:focus {
   outline: none; border-color: var(--signal-dim);
 }
@@ -92,9 +101,9 @@ textarea:focus, input:focus {
 .checklist-row.is-done { opacity: .55; }
 .checklist-row.is-done .checklist-title-input { text-decoration: line-through; }
 
-.checklist-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
-.checklist-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
-.checklist-minutes-input { width: 56px; margin: 0; text-align: right; padding: 6px 8px; }
+input.checklist-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
+input.checklist-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
+input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: right; padding: 6px 8px; }
 .unit-label { color: var(--text-2); font-size: 12px; }
 
 .checklist-add-row { display: flex; gap: 8px; margin-top: 4px; }
@@ -123,6 +132,6 @@ textarea:focus, input:focus {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 10px 12px;
 }
-.calendar-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
-.calendar-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
+input.calendar-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
+input.calendar-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
 .calendar-date { font-size: 12px; color: var(--text-2); white-space: nowrap; }

@@ -37,18 +37,21 @@ export default function DeadlinePlanner({ onAddEvent, onRemoveEvent }) {
   }
 
   function toggleStep(step) {
-    setRoadmap((prev) =>
-      prev.map((s) => {
-        if (s.id !== step.id) return s;
-        if (!s.included) {
-          const eventId = `${s.id}-evt`;
-          onAddEvent({ id: eventId, title: s.title, date: s.suggestedDate, kind: 'roadmap' });
-          return { ...s, included: true, calendarEventId: eventId };
-        }
-        onRemoveEvent(s.calendarEventId);
-        return { ...s, included: false, calendarEventId: null };
-      })
-    );
+    // onAddEvent/onRemoveEvent는 부모 state를 바꾸는 부수효과라서, setRoadmap의
+    // updater 함수 밖에서 정확히 한 번만 실행되게 분리한다. (React StrictMode는
+    // updater 함수를 두 번 호출하므로, 안에 부수효과가 있으면 이벤트가 중복 등록됨)
+    if (!step.included) {
+      const eventId = `${step.id}-evt`;
+      onAddEvent({ id: eventId, title: step.title, date: step.suggestedDate, kind: 'roadmap' });
+      setRoadmap((prev) =>
+        prev.map((s) => (s.id === step.id ? { ...s, included: true, calendarEventId: eventId } : s))
+      );
+    } else {
+      onRemoveEvent(step.calendarEventId);
+      setRoadmap((prev) =>
+        prev.map((s) => (s.id === step.id ? { ...s, included: false, calendarEventId: null } : s))
+      );
+    }
   }
 
   return (
