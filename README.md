@@ -65,7 +65,9 @@
 
 | 구현 요소 | 설명 | 우선순위 |
 |---|---|---|
-| 태스크 입력 및 LLM 퀘스트 분해 | "오늘 할 일" + "마감 태스크" 입력 → Claude API가 세분화된 퀘스트(제목/목표시간/순서/데드라인)로 변환 | 필수 |
+| 회원가입/로그인 | 이메일(비번+인증코드) 또는 구글/카카오 OAuth, 최초 로그인 시 닉네임 설정 | 필수 |
+| 태스크 입력 및 LLM 계획 분해 | "오늘 할 일" 입력 → Gemini API가 휴식 포함 체크리스트로 변환 | 필수 |
+| 마감 태스크 → 캘린더/로드맵 | 마감 태스크 입력 → 캘린더 자동 등록 + 로드맵 생성, 단계별 캘린더 등록 선택 | 필수 |
 | 캐스케이딩 데드라인 | 퀘스트가 지연되면 다음 퀘스트 목표시간에 버퍼를 반영해 자동 보정 | 필수 |
 | 백그라운드 활동 모니터링 | 키보드/마우스 메타데이터 + 활성 창 카테고리(개발/AI채팅/딴짓)로 집중 스코어 계산 | 필수 |
 | 팩트 기반 알림 (이탈/과몰입) | 집중 스코어 임계값 이하 지속, 또는 연속 몰입시간 초과 시 판단 없는 사실 전달형 알림 | 필수 |
@@ -76,7 +78,9 @@
 
 ## 아키텍처
 
-Electron 기반 데스크톱 앱. 메인 프로세스(Node.js, 백엔드 담당)가 uiohook-napi/active-win으로 OS 레벨 이벤트를 수집하고 SQLite에 적재, Claude API 호출을 담당한다. 렌더러 프로세스(React, 프론트엔드 담당)는 UI만 그리고 IPC(`quest:update`, `focus:alert` 등 채널)로 메인 프로세스와 통신한다. Day 1~2는 Electron 없이 브라우저 기반 웹앱(React + Express)으로 프로토타이핑하고, Day 3에 Electron으로 이전한다.
+Electron 기반 데스크톱 앱. 메인 프로세스(Node.js, 백엔드 담당)가 uiohook-napi/active-win으로 OS 레벨 이벤트를 수집하고 SQLite에 적재, Gemini API 호출을 담당한다. 렌더러 프로세스(React, 프론트엔드 담당)는 UI만 그리고 IPC(`quest:update`, `focus:alert` 등 채널)로 메인 프로세스와 통신한다. Day 1~2는 Electron 없이 브라우저 기반 웹앱(React + Express)으로 프로토타이핑하고, Day 3에 Electron으로 이전한다.
+
+인증은 세션 JWT를 httpOnly 쿠키로 발급하는 방식. 구글/카카오는 백엔드가 OAuth authorize/callback을 처리(passport 없이 직접 구현)하고, 이메일 가입은 인증코드를 이메일로 발송(Resend)해 확인 후 계정을 생성한다. 로그인 직후 닉네임이 없으면 `/nickname`으로 리다이렉트.
 
 ---
 
@@ -96,20 +100,32 @@ Electron 기반 데스크톱 앱. 메인 프로세스(Node.js, 백엔드 담당)
 - 계획 항목(체크리스트): `{ id, type: 'task'|'break', title, targetMinutes, order, done }` — 프론트엔드 상태로만 존재 (Day 3 이후 SQLite로 영속화 예정)
 - 캘린더 이벤트: `{ id, title, date, kind: 'deadline'|'roadmap' }` — 마감 태스크 등록 시 자동 생성되고, 로드맵 단계는 사용자가 선택적으로 추가
 
+인증용 SQLite(`backend/data.sqlite`, gitignore됨, `node:sqlite` 사용 — 아래 기술구성 참고):
+- `users`: `id, email, password_hash?, provider('email'|'google'|'kakao'), provider_id?, nickname?, email_verified, created_at`
+- `email_verifications`: `email, code, password_hash, expires_at, attempts` — 코드 확인 성공 시 users로 이동하고 삭제되는 임시 테이블
+
 ### API / 외부 서비스 연동
 
 | Method / 방식 | Endpoint / 서비스 | 설명 | 요청 | 응답 | 비고 |
 |---|---|---|---|---|---|
 | POST | `/api/plan` | "오늘 할 일"을 휴식 포함 계획으로 분해 | `{ tasks }` | `{ items: [...] }` | 내부적으로 Gemini API 호출 |
 | POST | `/api/deadline-tasks` | 마감 태스크 → 캘린더 이벤트 이름 + 로드맵 생성 | `{ description, deadline }` | `{ eventName, roadmap: [...] }` | 내부적으로 Gemini API 호출 |
+| POST | `/api/auth/email/send-code` | 이메일/비번 검증 후 인증코드 발송 | `{ email, password, passwordConfirm }` | `{ ok: true }` | Resend 필요 |
+| POST | `/api/auth/email/verify` | 인증코드 확인 → 계정 생성 + 세션 발급 | `{ email, code }` | `{ user }` | httpOnly 쿠키 설정 |
+| POST | `/api/auth/login` | 이메일/비번 로그인 | `{ email, password }` | `{ user }` | |
+| GET | `/api/auth/google`, `/api/auth/kakao` | OAuth 시작 (프론트에서 `<a href>`로 이동) | - | 302 리다이렉트 | GOOGLE/KAKAO 자격증명 필요 |
+| GET | `/api/auth/google/callback`, `/api/auth/kakao/callback` | OAuth 콜백, 토큰 교환 후 계정 upsert | - | 302 리다이렉트 | |
+| GET | `/api/auth/me` | 현재 세션 사용자 조회 | - | `{ user }` | 인증 필요 |
+| POST | `/api/auth/nickname` | 닉네임 설정 | `{ nickname }` | `{ user }` | 인증 필요 |
+| POST | `/api/auth/logout` | 로그아웃 | - | `{ ok: true }` | |
 | - | Google Gemini API | 계획 분해 / 로드맵 생성에 사용 | - | - | `backend/.env`의 `GEMINI_API_KEY` 필요 |
 
 ---
 
 ## 산출물 및 실행 방법
 
-- **산출물 설명:** Day 1 기준 — 오늘 할 일/마감 태스크를 입력하면 LLM이 퀘스트로 분해해 보여주는 웹 프로토타입 (`frontend` + `backend`)
-- **실행 환경:** Node.js 18+, Anthropic API 키
+- **산출물 설명:** 오늘 할 일/마감 태스크를 입력하면 LLM이 계획으로 분해해 보여주고, 로그인(이메일/구글/카카오) 이후 사용 가능한 웹 프로토타입 (`frontend` + `backend`)
+- **실행 환경:** Node.js 22+ (node:sqlite 사용), Gemini API 키. 소셜로그인/이메일인증은 각각 구글·카카오 앱 자격증명, Resend 키 필요 (없어도 나머지 기능은 정상 동작)
 - **실행 방법:** 아래 "실행 방법" 참고
 - **시연 영상 / 이미지:** (선택)
 
@@ -118,7 +134,7 @@ Electron 기반 데스크톱 앱. 메인 프로세스(Node.js, 백엔드 담당)
 ```bash
 # 백엔드
 cd backend
-cp .env.example .env   # ANTHROPIC_API_KEY 입력
+cp .env.example .env   # GEMINI_API_KEY 등 입력 (.env.example 주석 참고)
 npm install
 npm run dev             # http://localhost:4000
 
@@ -132,11 +148,12 @@ npm run dev              # http://localhost:5173
 
 | 분류 | 사용 기술 |
 |---|---|
-| 핵심 기술 | React (Vite), Express, Electron(3일차~) |
-| 실행 환경 | Node.js, uiohook-napi, active-win (3일차~) |
-| 데이터 저장 | SQLite / better-sqlite3 (3일차~) |
-| 외부 API / 서비스 | Anthropic Claude API |
-| 기타 | better-sqlite3, dotenv |
+| 핵심 기술 | React (Vite), react-router-dom, Express, Electron(3일차~) |
+| 실행 환경 | Node.js 22+, uiohook-napi, active-win (3일차~) |
+| 데이터 저장 | SQLite — `node:sqlite`(Node 내장). better-sqlite3는 이 Node 버전에서 네이티브 빌드 실패로 대체 |
+| 외부 API / 서비스 | Google Gemini API, Google/Kakao OAuth, Resend(이메일 인증) |
+| 인증 | JWT(httpOnly 쿠키), bcryptjs |
+| 기타 | dotenv, cookie-parser, cors |
 
 ---
 
