@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import DailyPlanner from './components/DailyPlanner.jsx';
 import DeadlinePlanner from './components/DeadlinePlanner.jsx';
-import CalendarList from './components/CalendarList.jsx';
+import CalendarGrid from './components/CalendarGrid.jsx';
 
 let eventCounter = 1;
 function makeEventId() {
@@ -32,7 +32,7 @@ export default function App() {
 
         <DailyPlanner />
         <DeadlinePlanner onAddEvent={addEvent} onRemoveEvent={removeEvent} />
-        <CalendarList events={events} onUpdate={updateEvent} onRemove={removeEvent} />
+        <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
       </div>
     </div>
   );
