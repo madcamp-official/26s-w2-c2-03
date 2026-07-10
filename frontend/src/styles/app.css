@@ -1,0 +1,102 @@
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.page { min-height: 100%; padding-bottom: 80px; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 0; border-bottom: 1px solid var(--line); margin-bottom: 32px;
+}
+.wordmark { font-family: var(--font-mono); font-size: 15px; }
+.wordmark b { color: var(--signal); font-weight: 700; }
+
+/* ---- task input form ---- */
+.task-input {
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 40px;
+}
+.field-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--text-2); margin-top: 14px;
+}
+.field-label:first-child { margin-top: 0; }
+
+textarea, input[type="text"], input[type="time"] {
+  font-family: var(--font-sans); font-size: 14px; color: var(--text-1);
+  background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px; margin-top: 6px; width: 100%;
+}
+textarea { resize: vertical; font-family: inherit; }
+textarea:focus, input:focus {
+  outline: none; border-color: var(--signal-dim);
+}
+
+.deadline-row { display: flex; gap: 8px; margin-top: 6px; }
+.deadline-row input[type="text"] { flex: 2; }
+.deadline-row input[type="time"] { flex: 1; }
+
+.deadline-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.deadline-list li {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; background: var(--surface-2); border-radius: var(--radius);
+  padding: 6px 10px;
+}
+.deadline-list li span:first-child { flex: 1; }
+.deadline-list li button {
+  background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 14px;
+}
+.deadline-list li button:hover { color: var(--urgent); }
+
+.btn-primary, .btn-ghost {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em;
+  border-radius: var(--radius); cursor: pointer; text-transform: uppercase;
+}
+.btn-primary {
+  margin-top: 16px; align-self: flex-start;
+  background: var(--signal); color: var(--signal-ink); border: none;
+  padding: 10px 18px;
+}
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary:not(:disabled):hover { filter: brightness(1.08); }
+
+.btn-ghost {
+  background: var(--surface); border: 1px solid var(--line); color: var(--text-2);
+  padding: 0 12px;
+}
+.btn-ghost:hover { border-color: var(--signal-dim); color: var(--text-1); }
+
+.error-text { color: var(--urgent); font-size: 13.5px; margin: -20px 0 24px; }
+
+/* ---- quest section ---- */
+.section-head {
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--line); padding-bottom: 10px;
+}
+.section-head .section-num { font-family: var(--font-mono); font-size: 12px; color: var(--signal); }
+.section-head h2 { font-size: 15px; font-weight: 650; margin: 0; }
+
+.quest-stack { display: flex; flex-direction: column; gap: 10px; }
+
+.quest-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.quest-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.quest-title { font-size: 14.5px; font-weight: 650; margin: 0 0 4px; }
+.quest-sub { font-size: 12.5px; color: var(--text-2); margin: 0; font-family: var(--font-mono); }
+.quest-tag {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .03em;
+  background: var(--urgent); color: #fff; padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+}

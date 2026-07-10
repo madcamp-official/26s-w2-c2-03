@@ -1,0 +1,60 @@
+:root {
+  --ground: #F5F1E8;
+  --surface: #FFFFFF;
+  --surface-2: #EDE6D6;
+  --line: #DCD2BC;
+  --signal: #B5660F;
+  --signal-dim: #C9985E;
+  --signal-ink: #FFFFFF;
+  --noise: #5B6472;
+  --urgent: #B23A2C;
+  --text-1: #241D14;
+  --text-2: #6B5D46;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace;
+  --radius: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #14110D;
+    --surface: #1F1A14;
+    --surface-2: #2A231A;
+    --line: #3A3024;
+    --signal: #E8A33D;
+    --signal-dim: #9C7A46;
+    --signal-ink: #14110D;
+    --noise: #7C8798;
+    --urgent: #E0725F;
+    --text-1: #F2E9DA;
+    --text-2: #B8A98D;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ground: #14110D;
+  --surface: #1F1A14;
+  --surface-2: #2A231A;
+  --line: #3A3024;
+  --signal: #E8A33D;
+  --signal-dim: #9C7A46;
+  --signal-ink: #14110D;
+  --noise: #7C8798;
+  --urgent: #E0725F;
+  --text-1: #F2E9DA;
+  --text-2: #B8A98D;
+}
+
+:root[data-theme='light'] {
+  --ground: #F5F1E8;
+  --surface: #FFFFFF;
+  --surface-2: #EDE6D6;
+  --line: #DCD2BC;
+  --signal: #B5660F;
+  --signal-dim: #C9985E;
+  --signal-ink: #FFFFFF;
+  --noise: #5B6472;
+  --urgent: #B23A2C;
+  --text-1: #241D14;
+  --text-2: #6B5D46;
+}
