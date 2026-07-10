@@ -9,11 +9,15 @@ import {
   toDateKey,
   toLocalInputValue,
 } from '../utils/calendarGrid.js';
+import { formatDate } from '../utils/formatDate.js';
+
+const MAX_VISIBLE_CHIPS = 3;
 
 export default function CalendarGrid({ events, onUpdate, onRemove }) {
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
   const [selectedId, setSelectedId] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
+  const [expandedDayKey, setExpandedDayKey] = useState(null);
 
   const grid = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
 
@@ -67,6 +71,9 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
           const inMonth = day.getMonth() === monthDate.getMonth();
           const today = isSameDay(day, new Date());
           const dragOver = dragOverKey === key;
+          const expanded = expandedDayKey === key;
+          const visibleEvents = expanded ? dayEvents : dayEvents.slice(0, MAX_VISIBLE_CHIPS);
+          const hiddenCount = dayEvents.length - visibleEvents.length;
 
           return (
             <div
@@ -82,7 +89,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
             >
               <span className={`calendar-cell-date mono${today ? ' is-today' : ''}`}>{day.getDate()}</span>
               <div className="calendar-cell-events">
-                {dayEvents.map((ev) => (
+                {visibleEvents.map((ev) => (
                   <div
                     key={ev.id}
                     className={`calendar-chip ${ev.kind === 'deadline' ? 'tag-urgent' : 'tag-signal'}`}
@@ -94,6 +101,24 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
                     {ev.title}
                   </div>
                 ))}
+                {hiddenCount > 0 && (
+                  <button
+                    type="button"
+                    className="calendar-chip-more"
+                    onClick={() => setExpandedDayKey(key)}
+                  >
+                    +{hiddenCount}개
+                  </button>
+                )}
+                {expanded && dayEvents.length > MAX_VISIBLE_CHIPS && (
+                  <button
+                    type="button"
+                    className="calendar-chip-more"
+                    onClick={() => setExpandedDayKey(null)}
+                  >
+                    접기
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -127,6 +152,20 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
             </button>
             <button type="button" className="btn-ghost" onClick={() => setSelectedId(null)}>닫기</button>
           </div>
+
+          {selectedEvent.kind === 'deadline' && selectedEvent.roadmap && selectedEvent.roadmap.length > 0 && (
+            <div className="calendar-editor-roadmap">
+              <p className="field-label">이 마감의 로드맵</p>
+              {[...selectedEvent.roadmap]
+                .sort((a, b) => a.order - b.order)
+                .map((step, i) => (
+                  <div key={i} className="calendar-editor-roadmap-row">
+                    <span className="roadmap-title">{step.title}</span>
+                    <span className="mono roadmap-date">{formatDate(step.suggestedDate)}</span>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
     </section>

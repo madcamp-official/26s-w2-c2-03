@@ -15,6 +15,10 @@ export default function DeadlinePlanner({ onAddEvent, onUpdateEvent, onRemoveEve
   const [roadmap, setRoadmap] = useState(null);
   const [needsMoreInfo, setNeedsMoreInfo] = useState(false);
   const [lastEventId, setLastEventId] = useState(null);
+  // 방금 만든 로드맵이 속한 마감 이벤트 id — lastEventId와 별개로 둔다.
+  // lastEventId는 성공 시 null로 리셋되지만(다음 제출은 새 이벤트), 로드맵
+  // 체크박스는 리셋 이후에도 눌릴 수 있어서 parentId 연결용으로 따로 유지한다.
+  const [roadmapParentId, setRoadmapParentId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -25,20 +29,21 @@ export default function DeadlinePlanner({ onAddEvent, onUpdateEvent, onRemoveEve
     setError(null);
     try {
       const result = await generateDeadlineRoadmap({ title, details, deadline });
+      const cleanRoadmap = [...result.roadmap].sort((a, b) => a.order - b.order);
 
-      if (lastEventId) {
+      let eventId = lastEventId;
+      if (eventId) {
         // 설명을 추가해서 다시 만드는 경우 — 새 이벤트를 또 추가하지 않고 기존 걸 갱신
-        onUpdateEvent(lastEventId, { title: result.eventName, date: deadline });
+        onUpdateEvent(eventId, { title: result.eventName, date: deadline, roadmap: cleanRoadmap });
       } else {
-        const eventId = makeId('deadline');
-        onAddEvent({ id: eventId, title: result.eventName, date: deadline, kind: 'deadline' });
+        eventId = makeId('deadline');
+        onAddEvent({ id: eventId, title: result.eventName, date: deadline, kind: 'deadline', roadmap: cleanRoadmap });
         setLastEventId(eventId);
       }
+      setRoadmapParentId(eventId);
 
       setRoadmap(
-        [...result.roadmap]
-          .sort((a, b) => a.order - b.order)
-          .map((step) => ({ ...step, id: makeId('step'), included: false, calendarEventId: null }))
+        cleanRoadmap.map((step) => ({ ...step, id: makeId('step'), included: false, calendarEventId: null }))
       );
       setNeedsMoreInfo(Boolean(result.needsMoreInfo));
 
@@ -65,7 +70,7 @@ export default function DeadlinePlanner({ onAddEvent, onUpdateEvent, onRemoveEve
     // updater 함수를 두 번 호출하므로, 안에 부수효과가 있으면 이벤트가 중복 등록됨)
     if (!step.included) {
       const eventId = `${step.id}-evt`;
-      onAddEvent({ id: eventId, title: step.title, date: step.suggestedDate, kind: 'roadmap' });
+      onAddEvent({ id: eventId, title: step.title, date: step.suggestedDate, kind: 'roadmap', parentId: roadmapParentId });
       setRoadmap((prev) =>
         prev.map((s) => (s.id === step.id ? { ...s, included: true, calendarEventId: eventId } : s))
       );

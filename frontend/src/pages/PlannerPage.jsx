@@ -22,7 +22,8 @@ export default function PlannerPage() {
   }
 
   function removeEvent(id) {
-    setEvents((prev) => prev.filter((ev) => ev.id !== id));
+    // 마감(부모) 이벤트를 지우면, 거기서 파생된 로드맵 단계 이벤트(parentId로 연결)도 같이 지운다
+    setEvents((prev) => prev.filter((ev) => ev.id !== id && ev.parentId !== id));
   }
 
   return (
