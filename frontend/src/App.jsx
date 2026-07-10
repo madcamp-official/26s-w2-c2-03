@@ -1,24 +1,26 @@
 import { useState } from 'react';
-import TaskInput from './components/TaskInput.jsx';
-import QuestList from './components/QuestList.jsx';
-import { decomposeQuests } from './api.js';
+import DailyPlanner from './components/DailyPlanner.jsx';
+import DeadlinePlanner from './components/DeadlinePlanner.jsx';
+import CalendarList from './components/CalendarList.jsx';
+
+let eventCounter = 1;
+function makeEventId() {
+  return `evt-${eventCounter++}-${Date.now()}`;
+}
 
 export default function App() {
-  const [quests, setQuests] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [events, setEvents] = useState([]);
 
-  async function handleSubmit({ tasks, deadlineTasks }) {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await decomposeQuests({ tasks, deadlineTasks });
-      setQuests(result.quests);
-    } catch (err) {
-      setError(err.message || '퀘스트 분해에 실패했어요');
-    } finally {
-      setLoading(false);
-    }
+  function addEvent(event) {
+    setEvents((prev) => [...prev, { ...event, id: event.id || makeEventId() }]);
+  }
+
+  function updateEvent(id, patch) {
+    setEvents((prev) => prev.map((ev) => (ev.id === id ? { ...ev, ...patch } : ev)));
+  }
+
+  function removeEvent(id) {
+    setEvents((prev) => prev.filter((ev) => ev.id !== id));
   }
 
   return (
@@ -28,11 +30,9 @@ export default function App() {
           <div className="wordmark"><b>FOCUS</b>·LOG</div>
         </header>
 
-        <TaskInput onSubmit={handleSubmit} loading={loading} />
-
-        {error && <p className="error-text">{error}</p>}
-
-        {quests && <QuestList quests={quests} />}
+        <DailyPlanner />
+        <DeadlinePlanner onAddEvent={addEvent} onRemoveEvent={removeEvent} />
+        <CalendarList events={events} onUpdate={updateEvent} onRemove={removeEvent} />
       </div>
     </div>
   );

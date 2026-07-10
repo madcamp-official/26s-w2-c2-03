@@ -21,11 +21,20 @@ body {
 .wordmark { font-family: var(--font-mono); font-size: 15px; }
 .wordmark b { color: var(--signal); font-weight: 700; }
 
-/* ---- task input form ---- */
+/* ---- shared section shell ---- */
+.panel { margin-bottom: 40px; }
+.section-head {
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--line); padding-bottom: 10px;
+}
+.section-head .section-num { font-family: var(--font-mono); font-size: 12px; color: var(--signal); }
+.section-head h2 { font-size: 15px; font-weight: 650; margin: 0; }
+
+/* ---- shared form ---- */
 .task-input {
   display: flex; flex-direction: column; gap: 8px;
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 20px; margin-bottom: 40px;
+  border-radius: var(--radius); padding: 20px;
 }
 .field-label {
   font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
@@ -33,7 +42,7 @@ body {
 }
 .field-label:first-child { margin-top: 0; }
 
-textarea, input[type="text"], input[type="time"] {
+textarea, input[type="text"], input[type="number"], input[type="datetime-local"] {
   font-family: var(--font-sans); font-size: 14px; color: var(--text-1);
   background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 10px 12px; margin-top: 6px; width: 100%;
@@ -42,22 +51,6 @@ textarea { resize: vertical; font-family: inherit; }
 textarea:focus, input:focus {
   outline: none; border-color: var(--signal-dim);
 }
-
-.deadline-row { display: flex; gap: 8px; margin-top: 6px; }
-.deadline-row input[type="text"] { flex: 2; }
-.deadline-row input[type="time"] { flex: 1; }
-
-.deadline-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.deadline-list li {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; background: var(--surface-2); border-radius: var(--radius);
-  padding: 6px 10px;
-}
-.deadline-list li span:first-child { flex: 1; }
-.deadline-list li button {
-  background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 14px;
-}
-.deadline-list li button:hover { color: var(--urgent); }
 
 .btn-primary, .btn-ghost {
   font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em;
@@ -73,30 +66,63 @@ textarea:focus, input:focus {
 
 .btn-ghost {
   background: var(--surface); border: 1px solid var(--line); color: var(--text-2);
-  padding: 0 12px;
+  padding: 8px 12px;
 }
 .btn-ghost:hover { border-color: var(--signal-dim); color: var(--text-1); }
 
-.error-text { color: var(--urgent); font-size: 13.5px; margin: -20px 0 24px; }
+.error-text { color: var(--urgent); font-size: 13.5px; margin: 10px 0 0; }
 
-/* ---- quest section ---- */
-.section-head {
-  display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;
-  border-bottom: 1px solid var(--line); padding-bottom: 10px;
-}
-.section-head .section-num { font-family: var(--font-mono); font-size: 12px; color: var(--signal); }
-.section-head h2 { font-size: 15px; font-weight: 650; margin: 0; }
-
-.quest-stack { display: flex; flex-direction: column; gap: 10px; }
-
-.quest-card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 14px 16px;
-}
-.quest-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.quest-title { font-size: 14.5px; font-weight: 650; margin: 0 0 4px; }
-.quest-sub { font-size: 12.5px; color: var(--text-2); margin: 0; font-family: var(--font-mono); }
-.quest-tag {
+/* ---- type tags (shared) ---- */
+.type-tag {
   font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .03em;
-  background: var(--urgent); color: #fff; padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+  padding: 3px 8px; border-radius: 2px; white-space: nowrap; text-transform: uppercase;
 }
+.tag-noise { background: var(--noise); color: #fff; }
+.tag-urgent { background: var(--urgent); color: #fff; }
+.tag-signal { background: var(--signal); color: var(--signal-ink); }
+
+/* ---- checklist (오늘의 계획) ---- */
+.checklist { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.checklist-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.checklist-row.is-break { border-style: dashed; }
+.checklist-row.is-done { opacity: .55; }
+.checklist-row.is-done .checklist-title-input { text-decoration: line-through; }
+
+.checklist-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
+.checklist-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
+.checklist-minutes-input { width: 56px; margin: 0; text-align: right; padding: 6px 8px; }
+.unit-label { color: var(--text-2); font-size: 12px; }
+
+.checklist-add-row { display: flex; gap: 8px; margin-top: 4px; }
+
+.row-remove {
+  background: none; border: none; color: var(--text-2); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 4px;
+}
+.row-remove:hover { color: var(--urgent); }
+
+/* ---- roadmap (마감 태스크) ---- */
+.roadmap-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.roadmap-row {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.roadmap-row:hover { border-color: var(--signal-dim); }
+.roadmap-title { flex: 1; font-size: 13.5px; }
+.roadmap-date { font-size: 12px; color: var(--text-2); }
+
+/* ---- calendar ---- */
+.calendar-list { display: flex; flex-direction: column; gap: 8px; }
+.calendar-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.calendar-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
+.calendar-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
+.calendar-date { font-size: 12px; color: var(--text-2); white-space: nowrap; }
