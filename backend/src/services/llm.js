@@ -1,9 +1,10 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-// 'gemini-flash-latest'는 Google이 관리하는 별칭이라, 특정 버전이 나중에
-// deprecated 되어도 코드를 안 고쳐도 최신 flash 모델을 계속 가리킴
-const MODEL = 'gemini-flash-latest';
+// 'gemini-flash-latest'는 계속 "high demand" 503으로 실패해서(실측: 여러 번
+// 재현됨) 'gemini-flash-lite-latest'로 교체. lite 계열이라 더 빠르고
+// 안정적으로 응답하면서, 우리 스키마 기준 품질도 문제없음을 확인함
+const MODEL = 'gemini-flash-lite-latest';
 
 // ---- 오늘 할 일 → 휴식 포함 계획 ----
 
@@ -45,6 +46,9 @@ export async function generateDailyPlan({ tasks }) {
       systemInstruction: PLAN_SYSTEM_PROMPT,
       responseMimeType: 'application/json',
       responseSchema: PLAN_SCHEMA,
+      // 출력 상한을 걸어서 불필요하게 긴 생성으로 지연시간이 늘어나는 걸 방지.
+      // 체크리스트는 원래 짧은 출력이라 이 정도로도 안 잘림
+      maxOutputTokens: 1200,
     },
   });
 
@@ -55,15 +59,21 @@ export async function generateDailyPlan({ tasks }) {
 // ---- 마감 태스크 → 캘린더 이벤트 이름 + 로드맵 ----
 
 const ROADMAP_SYSTEM_PROMPT = `당신은 ADHD가 있는 개발자가 마감이 있는 태스크를 놓치지 않도록 돕는 보조 도구입니다.
-사용자가 마감이 있는 태스크 설명과 마감 시각을 알려주면:
-1. 캘린더에 등록할 짧고 명확한 이벤트 이름(eventName)을 만들어주세요.
+사용자가 마감이 있는 태스크의 이름(title)과, 있다면 그 태스크에 대한 설명(details), 마감 시각을 알려주면:
+1. 캘린더에 등록할 짧고 명확한 이벤트 이름(eventName)을 만들어주세요. 보통 title을 그대로 쓰거나 다듬으면 됩니다.
 2. 지금부터 마감까지, 이 태스크를 끝내기 위해 거쳐야 할 중간 단계들을 로드맵(roadmap)으로 만들어주세요. 각 단계에는 그 단계를 마쳐야 하는 제안 날짜/시각(suggestedDate, ISO 8601 형식)을 붙이세요. 마감 시각을 절대 넘기지 않도록 역산해서 배치하세요.
-3. 로드맵 단계는 3~6개 정도로, 너무 잘게 쪼개지 마세요 (세부 작업 분해는 별도 기능에서 합니다).`;
+3. 로드맵 단계는 3~6개 정도로, 너무 잘게 쪼개지 마세요 (세부 작업 분해는 별도 기능에서 합니다).
+4. title이 "몰입캠프 2주차 과제", "발표 준비"처럼 실제로 무엇을 해야 하는지 알 수 없을 만큼 일반적이고, details도 비어있어서 로드맵을 구체적으로 만들기 어려운 경우: needsMoreInfo를 true로 설정하고, 그래도 가장 무난하게 적용될 법한 범용 로드맵(자료조사→초안→피드백→마무리 같은)을 만들어주세요.
+5. title이나 details에서 실제로 무엇을 하는 태스크인지 알 수 있다면 needsMoreInfo는 false로 설정하세요.`;
 
 const ROADMAP_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     eventName: { type: Type.STRING, description: '캘린더에 표시할 짧은 이벤트 이름' },
+    needsMoreInfo: {
+      type: Type.BOOLEAN,
+      description: '태스크 이름/설명만으로는 정보가 부족해서, 설명을 추가하면 로드맵이 더 정확해질 수 있는 경우 true',
+    },
     roadmap: {
       type: Type.ARRAY,
       items: {
@@ -77,17 +87,22 @@ const ROADMAP_SCHEMA = {
       },
     },
   },
-  required: ['eventName', 'roadmap'],
+  required: ['eventName', 'needsMoreInfo', 'roadmap'],
 };
 
-export async function generateDeadlineRoadmap({ description, deadline }) {
+export async function generateDeadlineRoadmap({ title, details, deadline }) {
+  const taskInfo = details && details.trim()
+    ? `태스크 이름: ${title}\n태스크 설명: ${details}`
+    : `태스크 이름: ${title}\n태스크 설명: (없음)`;
+
   const response = await genAI.models.generateContent({
     model: MODEL,
-    contents: `태스크: ${description}\n마감 시각: ${deadline}\n현재 시각: ${new Date().toISOString()}`,
+    contents: `${taskInfo}\n마감 시각: ${deadline}\n현재 시각: ${new Date().toISOString()}`,
     config: {
       systemInstruction: ROADMAP_SYSTEM_PROMPT,
       responseMimeType: 'application/json',
       responseSchema: ROADMAP_SCHEMA,
+      maxOutputTokens: 800,
     },
   });
 
