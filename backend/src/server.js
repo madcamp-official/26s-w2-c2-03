@@ -23,5 +23,5 @@ app.use('/api/planner-data', plannerDataRouter);
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
-  console.log(`[focuslog-backend] listening on http://localhost:${port}`);
+  console.log(`[zonemate-backend] listening on http://localhost:${port}`);
 });

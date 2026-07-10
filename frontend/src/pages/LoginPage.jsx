@@ -29,7 +29,7 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="wordmark"><b>FOCUS</b>·LOG</div>
+        <div className="wordmark"><b>Zone</b>mate</div>
         <h1>로그인</h1>
 
         <div className="oauth-buttons">

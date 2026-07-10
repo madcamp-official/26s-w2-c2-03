@@ -71,7 +71,7 @@ export default function PlannerPage() {
     <div className="page">
       <div className="wrap">
         <header className="topbar">
-          <div className="wordmark"><b>FOCUS</b>·LOG</div>
+          <div className="wordmark"><b>Zone</b>mate</div>
           <div className="topbar-user">
             <span className="mono">{user?.nickname}님</span>
             <button type="button" className="btn-ghost" onClick={logout}>로그아웃</button>
