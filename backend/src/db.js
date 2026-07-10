@@ -60,6 +60,22 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS daily_archives (
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    tasks_json TEXT NOT NULL,
+    archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS planner_meta (
+    user_id TEXT PRIMARY KEY,
+    day_end_time TEXT,
+    day_end_date TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_planner_tasks_user_order
     ON planner_tasks(user_id, sort_order);
 

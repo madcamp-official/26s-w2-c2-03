@@ -53,8 +53,16 @@ export function fetchPlannerData() {
   return getJson('/api/planner-data');
 }
 
-export function savePlannerData({ tasks, events }) {
-  return putJson('/api/planner-data', { tasks, events });
+export function savePlannerData({ tasks, events, dayEndTime, dayEndDate }) {
+  return putJson('/api/planner-data', { tasks, events, dayEndTime, dayEndDate });
+}
+
+export function fetchDailyArchive(date) {
+  return getJson(`/api/daily-archives/${date}`);
+}
+
+export function closeDay(date, tasks) {
+  return postJson('/api/daily-archives/close-day', { date, tasks });
 }
 
 // ---- auth ----

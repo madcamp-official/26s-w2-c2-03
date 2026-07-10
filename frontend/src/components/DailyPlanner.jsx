@@ -11,14 +11,13 @@ function makeId() {
 
 const INITIAL_BOT_MESSAGE = '오늘 할 일을 편하게 알려주세요. 짧게 적어도 괜찮아요, 필요하면 제가 한두 가지만 더 물어볼게요.';
 
-export default function DailyPlanner({ items, onItemsChange }) {
+export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEndTimeChange }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [dragOverId, setDragOverId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [planDone, setPlanDone] = useState(false);
-  const [dayEndTime, setDayEndTime] = useState(null);
   const [showWheel, setShowWheel] = useState(false);
 
   const questionCount = messages.filter((m) => m.role === 'assistant').length;
@@ -54,7 +53,7 @@ export default function DailyPlanner({ items, onItemsChange }) {
           const preserved = (prev || []).filter((it) => it.sourceEventId);
           return withUpdatedOrder([...withState, ...preserved]);
         });
-        setDayEndTime(result.dayEndTime || null);
+        if (result.dayEndTime) onDayEndTimeChange(result.dayEndTime);
         setPlanDone(true);
       } else {
         setMessages((prev) => [...prev, { role: 'assistant', text: result.question }]);
@@ -71,7 +70,6 @@ export default function DailyPlanner({ items, onItemsChange }) {
     setDraft('');
     setError(null);
     setPlanDone(false);
-    setDayEndTime(null);
     setShowWheel(false);
   }
 

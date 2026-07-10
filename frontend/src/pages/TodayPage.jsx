@@ -9,7 +9,7 @@ function makeId() {
 }
 
 export default function TodayPage() {
-  const { tasks, setTasks, events } = useOutletContext();
+  const { tasks, setTasks, events, dayEndTime, setDayEnd } = useOutletContext();
   // 리액트 개발 모드(StrictMode)는 마운트 시 effect를 두 번 실행해서 부수효과
   // 중복 여부를 검사한다. setTasks는 함수형 업데이트를 쓰더라도 이 컴포넌트의
   // useRef는 두 번의 effect 호출 사이에 공유되므로, ref에 "이미 추가한 이벤트
@@ -49,5 +49,12 @@ export default function TodayPage() {
     });
   }, [events, setTasks]);
 
-  return <DailyPlanner items={tasks} onItemsChange={setTasks} />;
+  return (
+    <DailyPlanner
+      items={tasks}
+      onItemsChange={setTasks}
+      dayEndTime={dayEndTime}
+      onDayEndTimeChange={setDayEnd}
+    />
+  );
 }
