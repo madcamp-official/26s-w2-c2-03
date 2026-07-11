@@ -212,43 +212,57 @@ textarea:focus, input:focus {
 .chat-input-row input[type="text"] { flex: 1; margin: 0; }
 .chat-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
-/* ---- 가로 타임라인 시간표 ---- */
+/* ---- 가로 타임라인 시간표 ----
+   제목/시간은 왼쪽 라벨 칸에 두어 절대 잘리지 않게 하고, 오른쪽 트랙에는
+   시간 비율 막대만 그린다. 라벨 칸과 트랙(축 포함)은 같은 그리드로 정렬. */
 .timetable {
-  margin-top: 8px; padding: 16px 18px 18px;
+  margin-top: 8px; padding: 14px 18px 16px;
   background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius-md);
+  overflow: hidden;
 }
-.timetable-axis {
-  position: relative; height: 18px; margin: 0 0 6px; border-bottom: 1px solid var(--line);
+.timetable-row {
+  display: grid; grid-template-columns: minmax(120px, 34%) 1fr;
+  gap: 12px; align-items: center; min-height: 30px;
 }
+.timetable-row + .timetable-row { margin-top: 6px; }
+
+.timetable-axis-row { align-items: end; margin-bottom: 4px; }
+.timetable-axis-label { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+.timetable-axis-track { height: 16px; border-bottom: 1px solid var(--line); }
 .timetable-tick { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--line); }
 .timetable-tick-label {
-  position: absolute; top: 0; left: 3px; font-size: 10px; color: var(--text-2); white-space: nowrap;
+  position: absolute; bottom: 1px; left: 0; transform: translateX(-50%);
+  font-size: 10px; color: var(--text-2); white-space: nowrap;
+}
+
+.timetable-label { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.timetable-label-title {
+  font-size: 13px; font-weight: 600; color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.timetable-label-time { font-size: 10.5px; color: var(--text-2); }
+.timetable-row.is-done .timetable-label-title { text-decoration: line-through; color: var(--text-2); }
+.timetable-row.is-done .timetable-bar { opacity: .5; }
+
+.timetable-track { position: relative; height: 22px; }
+.timetable-row-endline {
+  position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed var(--urgent); opacity: .5; z-index: 1;
 }
 .timetable-endline {
-  position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed var(--urgent); z-index: 2;
+  position: absolute; top: -4px; bottom: 0; width: 0; border-left: 2px dashed var(--urgent); z-index: 2;
 }
 .timetable-endline-label {
-  position: absolute; top: -2px; left: 4px; font-size: 9.5px; color: var(--urgent); font-weight: 700; white-space: nowrap;
-}
-.timetable-rows { display: flex; flex-direction: column; gap: 6px; }
-.timetable-row { position: relative; height: 34px; }
-.timetable-row-endline {
-  position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--urgent); opacity: .4;
+  position: absolute; top: -4px; left: 0; transform: translateX(-50%);
+  font-size: 9.5px; color: var(--urgent); font-weight: 700; white-space: nowrap;
 }
 .timetable-bar {
-  position: absolute; top: 0; bottom: 0; min-width: 8px;
-  display: flex; align-items: center; gap: 8px; overflow: hidden;
-  padding: 0 10px; border-radius: 6px;
-  background: var(--signal); color: var(--signal-ink);
+  position: absolute; top: 0; bottom: 0; min-width: 5px;
+  border-radius: 5px; background: var(--signal);
   box-shadow: var(--shadow-sm); cursor: default;
-  transition: filter .12s ease, transform .12s ease;
+  transition: filter .12s ease;
 }
-.timetable-bar:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.timetable-bar:hover { filter: brightness(1.06); }
 .timetable-bar.is-break { background: var(--noise); }
-.timetable-bar.is-done { opacity: .55; }
-.timetable-bar.is-done .timetable-bar-title { text-decoration: line-through; }
-.timetable-bar-title { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.timetable-bar-time { font-size: 10.5px; opacity: .85; white-space: nowrap; flex: none; }
 
 /* ---- checklist (오늘의 계획) ---- */
 .checklist { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
@@ -274,6 +288,7 @@ textarea:focus, input:focus {
 
 input.checklist-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
 input.checklist-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
+input.checklist-time-input { width: 96px; flex: none; margin: 0; padding: 6px 8px; font-size: 12.5px; }
 input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: right; padding: 6px 8px; }
 .unit-label { color: var(--text-2); font-size: 12px; }
 

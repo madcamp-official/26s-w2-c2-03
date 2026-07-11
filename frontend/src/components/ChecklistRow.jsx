@@ -41,6 +41,13 @@ export default function ChecklistRow({
         onChange={(e) => onUpdate({ title: e.target.value })}
       />
       <input
+        type="time"
+        className="checklist-time-input mono"
+        value={item.startTime || ''}
+        onChange={(e) => onUpdate({ startTime: e.target.value || undefined })}
+        title="시작 시간"
+      />
+      <input
         type="number"
         className="checklist-minutes-input"
         min={1}
