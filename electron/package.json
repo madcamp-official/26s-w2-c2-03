@@ -6,7 +6,8 @@
   "main": "main.js",
   "type": "commonjs",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "smoke:windows": "set \"ELECTRON_RUN_AS_NODE=\" && set \"ELECTRON_SMOKE_TEST=1\" && electron ."
   },
   "dependencies": {
     "get-windows": "^9.3.0"

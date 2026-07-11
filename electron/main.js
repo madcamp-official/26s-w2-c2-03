@@ -18,6 +18,7 @@ const FRONTEND_DIR = path.join(ROOT, 'frontend');
 const FRONTEND_URL = 'http://localhost:5173';
 const BACKEND_HEALTH_URL = 'http://localhost:4000/api/health';
 const FOCUS_EVENTS_URL = 'http://localhost:4000/api/focus-events';
+const SMOKE_TEST = process.env.ELECTRON_SMOKE_TEST === '1';
 
 let backendProcess = null;
 let frontendProcess = null;
@@ -43,19 +44,28 @@ function startBackend() {
   backendProcess.on('exit', (code) => {
     console.log(`[electron] 백엔드 프로세스 종료 (code: ${code})`);
   });
+  backendProcess.on('error', (err) => {
+    console.error('[electron] 백엔드 프로세스 시작 실패:', err.message);
+  });
 }
 
 // 개발 중에는 Vite dev 서버를 그대로 띄워서 프론트엔드 HMR을 유지한다.
 // 프로덕션 빌드 시에는 이 대신 정적 빌드 결과물을 loadFile로 읽으면 된다
 // (아직 배포는 고려 안 함, 지금은 "감싸기"가 실제로 되는지 검증이 목적).
 function startFrontend() {
-  const viteBin = path.join(FRONTEND_DIR, 'node_modules', '.bin', 'vite');
-  frontendProcess = spawn(viteBin, ['--port', '5173'], {
+  // Windows의 node_modules/.bin/vite는 vite.cmd라 shell 없이 직접 spawn하면
+  // 실행되지 않을 수 있다. 실제 JS 진입점을 시스템 Node로 실행하면 양쪽 OS에서
+  // 같은 명령을 사용할 수 있고, 백엔드의 Node 22+ 요구사항과도 일치한다.
+  const viteEntry = path.join(FRONTEND_DIR, 'node_modules', 'vite', 'bin', 'vite.js');
+  frontendProcess = spawn('node', [viteEntry, '--port', '5173', '--strictPort'], {
     cwd: FRONTEND_DIR,
     stdio: 'inherit',
   });
   frontendProcess.on('exit', (code) => {
     console.log(`[electron] 프론트엔드 프로세스 종료 (code: ${code})`);
+  });
+  frontendProcess.on('error', (err) => {
+    console.error('[electron] 프론트엔드 프로세스 시작 실패:', err.message);
   });
 }
 
@@ -78,6 +88,23 @@ function waitForServer(url, { timeoutMs = 20000, intervalMs = 300 } = {}) {
   });
 }
 
+// 백엔드/프론트엔드가 이미(예: 사용자가 별도 터미널에서) 떠 있으면 중복으로
+// 다시 띄우지 않는다 — 안 그러면 포트 충돌(EADDRINUSE)로 새로 띄운 쪽이
+// 죽어버린다.
+function isServerReady(url) {
+  return new Promise((resolve) => {
+    const request = http.get(url, (res) => {
+      res.resume();
+      resolve(res.statusCode >= 200 && res.statusCode < 500);
+    });
+    request.setTimeout(1500, () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on('error', () => resolve(false));
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -85,6 +112,23 @@ function createWindow() {
     title: 'Zonemate',
   });
   mainWindow.loadURL(FRONTEND_URL);
+
+  if (SMOKE_TEST) {
+    mainWindow.webContents.once('did-finish-load', async () => {
+      try {
+        const apps = await getOpenAppList();
+        if (apps.length === 0 || apps.some((item) => !item.appId || !item.name)) {
+          throw new Error('열린 앱 목록 또는 appId가 비어 있음');
+        }
+        console.log(`[electron] SMOKE_APPS_OK — 열린 앱 ${apps.length}개 조회`);
+        console.log('[electron] SMOKE_TEST_OK — 메인 창 로드 완료');
+      } catch (err) {
+        console.error('[electron] SMOKE_TEST_FAILED:', err.message);
+        process.exitCode = 1;
+      }
+      setTimeout(() => app.quit(), 500);
+    });
+  }
 }
 
 // 대시보드용 기록 — 세션/이탈/휴식 이벤트를 백엔드에 남긴다. 지금은 인증
@@ -162,14 +206,22 @@ function showFocusAlert(alert) {
   });
 }
 
-// macOS에서 이미 실행 중인 앱을 포커스로 가져온다. osascript(자동화 권한
-// 필요)와 달리 `open -b <bundleId>`는 추가 권한 없이 앱을 앞으로 올려준다.
-// (Windows는 나중에 processId 기반으로 SetForegroundWindow 등을 붙인다.)
-function activateApp(bundleId) {
-  if (!bundleId) return;
+// 집중하던 앱을 다시 포커스로 가져온다.
+// macOS는 bundleId로 `open -b`(추가 권한 불필요), Windows는 bundleId가 없어서
+// PID 기반 WScript.Shell.AppActivate를 쓴다.
+function activateApp(appInfo) {
+  if (!appInfo) return;
   if (process.platform === 'darwin') {
-    execFile('open', ['-b', bundleId], (err) => {
-      if (err) console.error('[electron] 앱 활성화 실패:', bundleId, err.message);
+    if (!appInfo.bundleId) return;
+    execFile('open', ['-b', appInfo.bundleId], (err) => {
+      if (err) console.error('[electron] 앱 활성화 실패:', appInfo.bundleId, err.message);
+    });
+  } else if (process.platform === 'win32') {
+    const processId = Number(appInfo.processId);
+    if (!Number.isInteger(processId) || processId <= 0) return;
+    const script = `$shell = New-Object -ComObject WScript.Shell; if (-not $shell.AppActivate(${processId})) { exit 1 }`;
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], (err) => {
+      if (err) console.error('[electron] 앱 활성화 실패 (PID):', processId, err.message);
     });
   }
 }
@@ -200,27 +252,45 @@ const focusSession = {
   id: null,
   status: 'idle', // 'idle' | 'focusing' | 'onBreak'
   focusApps: [],
-  focusBundleIds: new Set(),
+  focusAppIds: new Set(),
   pollTimer: null,
   driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
   driftAppName: null,
   snoozedUntil: 0, // 이 시각까지는 재알림하지 않음
   ignoredCurrentDrift: false, // 이번 이탈에서 "무시하기"를 누른 적이 있는지
-  pendingReturnBundleId: null, // 무시하기 후 자연 복귀를 감지했을 때의 bundleId(확인 전 임시 보관)
-  lastFocusBundleId: null, // 마지막으로 집중 앱에 있었던 순간의 bundleId
+  pendingReturnApp: null, // 무시하기 후 자연 복귀를 감지했을 때의 appInfo(확인 전 임시 보관)
+  lastFocusApp: null, // 마지막으로 집중 앱에 있었던 순간의 appInfo
   breakTimer: null,
   breakEndsAt: null,
 };
+
+// 활성/열린 창 정보에서 플랫폼에 상관없이 앱을 식별할 키를 뽑아낸다.
+// macOS는 bundleId가 안정적인 식별자지만, Windows는 그게 없어서 실행 파일
+// 경로(없으면 앱 이름)를 대신 쓴다.
+function appIdentity(windowInfo) {
+  const owner = windowInfo?.owner;
+  if (!owner?.name) return null;
+  const appId = process.platform === 'darwin'
+    ? owner.bundleId
+    : owner.path || owner.name;
+  if (!appId) return null;
+  return {
+    appId,
+    name: owner.name,
+    bundleId: owner.bundleId || null,
+    processId: owner.processId || null,
+    path: owner.path || null,
+  };
+}
 
 async function getOpenAppList() {
   const { openWindows } = await loadGetWindows();
   const windows = await openWindows({ accessibilityPermission: false, screenRecordingPermission: false });
   const seen = new Map();
   for (const w of windows) {
-    const bundleId = w.owner?.bundleId;
-    const name = w.owner?.name;
-    if (!bundleId || !name || SYSTEM_BUNDLE_IDS.has(bundleId)) continue;
-    if (!seen.has(bundleId)) seen.set(bundleId, { bundleId, name });
+    const appInfo = appIdentity(w);
+    if (!appInfo || SYSTEM_BUNDLE_IDS.has(appInfo.bundleId)) continue;
+    if (!seen.has(appInfo.appId)) seen.set(appInfo.appId, appInfo);
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
@@ -276,8 +346,8 @@ async function pollFocus() {
   try {
     const { activeWindow } = await loadGetWindows();
     const info = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
-    const bundleId = info?.owner?.bundleId || null;
-    const onFocusApp = bundleId && focusSession.focusBundleIds.has(bundleId);
+    const activeApp = appIdentity(info);
+    const onFocusApp = activeApp && focusSession.focusAppIds.has(activeApp.appId);
     const now = Date.now();
 
     if (onFocusApp) {
@@ -286,7 +356,7 @@ async function pollFocus() {
         // 않는다 — "재개하기"를 눌러 명시적으로 확인해야 실제로 집중을
         // 재개한 것으로 본다. 확인 전까지는 이탈 상태(및 통계)를 그대로 유지.
         if (!alertWindow) {
-          focusSession.pendingReturnBundleId = bundleId;
+          focusSession.pendingReturnApp = activeApp;
           const driftMs = focusSession.driftStartedAt ? now - focusSession.driftStartedAt : 0;
           showFocusAlert({
             type: 'resume_confirm',
@@ -303,7 +373,7 @@ async function pollFocus() {
       if (focusSession.driftStartedAt) {
         logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt });
       }
-      focusSession.lastFocusBundleId = bundleId;
+      focusSession.lastFocusApp = activeApp;
       focusSession.driftStartedAt = null;
       focusSession.driftAppName = null;
       if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
@@ -340,13 +410,13 @@ function startFocusSession(focusApps) {
   focusSession.id = randomUUID();
   focusSession.status = 'focusing';
   focusSession.focusApps = focusApps;
-  focusSession.focusBundleIds = new Set(focusApps.map((a) => a.bundleId));
+  focusSession.focusAppIds = new Set(focusApps.map((a) => a.appId));
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.snoozedUntil = 0;
   focusSession.ignoredCurrentDrift = false;
-  focusSession.pendingReturnBundleId = null;
-  focusSession.lastFocusBundleId = focusApps[0]?.bundleId || null;
+  focusSession.pendingReturnApp = null;
+  focusSession.lastFocusApp = focusApps[0] || null;
 
   logFocusEvent('session_start', { focusApps });
 
@@ -367,7 +437,7 @@ function stopFocusSession() {
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.ignoredCurrentDrift = false;
-  focusSession.pendingReturnBundleId = null;
+  focusSession.pendingReturnApp = null;
 
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = null;
@@ -388,7 +458,7 @@ function startBreak(minutes) {
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.ignoredCurrentDrift = false;
-  focusSession.pendingReturnBundleId = null;
+  focusSession.pendingReturnApp = null;
   if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
 
   const ms = Math.max(1, minutes) * 60000;
@@ -468,9 +538,9 @@ ipcMain.on('alert-action', (event, action) => {
   console.log('[electron] 알림 액션 선택됨:', JSON.stringify(action));
   logFocusEvent('alert_action', action);
 
-  if (action.actionId === 'return' && focusSession.lastFocusBundleId) {
+  if (action.actionId === 'return' && focusSession.lastFocusApp) {
     // 이탈 직전에 집중하고 있던 앱으로 되돌린다.
-    activateApp(focusSession.lastFocusBundleId);
+    activateApp(focusSession.lastFocusApp);
   } else if (action.actionId === 'ignore') {
     // 5분간 재알림하지 않는다(이탈 자체는 계속 추적 — 무시했다고 해서
     // 실제로 벗어나 있던 시간 기록이 사라지면 안 되니까). 이번 이탈은
@@ -483,8 +553,8 @@ ipcMain.on('alert-action', (event, action) => {
     if (focusSession.driftStartedAt) {
       logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt, confirmedManually: true });
     }
-    focusSession.lastFocusBundleId = focusSession.pendingReturnBundleId || focusSession.lastFocusBundleId;
-    focusSession.pendingReturnBundleId = null;
+    focusSession.lastFocusApp = focusSession.pendingReturnApp || focusSession.lastFocusApp;
+    focusSession.pendingReturnApp = null;
     focusSession.driftStartedAt = null;
     focusSession.driftAppName = null;
     focusSession.ignoredCurrentDrift = false;
@@ -524,8 +594,17 @@ ipcMain.on('cancel-break-picker', () => {
 
 app.whenReady().then(async () => {
   createTray();
-  startBackend();
-  startFrontend();
+
+  const [backendAlreadyRunning, frontendAlreadyRunning] = await Promise.all([
+    isServerReady(BACKEND_HEALTH_URL),
+    isServerReady(FRONTEND_URL),
+  ]);
+
+  if (backendAlreadyRunning) console.log('[electron] 기존 백엔드(4000)를 재사용합니다.');
+  else startBackend();
+
+  if (frontendAlreadyRunning) console.log('[electron] 기존 Vite(5173)를 재사용합니다.');
+  else startFrontend();
 
   try {
     await Promise.all([
