@@ -104,7 +104,10 @@
 
         if (alert.type === 'overfocus') {
           card.classList.add('is-overfocus');
-          kickerEl.textContent = '과몰입 신호';
+          kickerEl.textContent = '과몰입 · 휴식 권장';
+        } else if (alert.type === 'underfocus') {
+          card.classList.remove('is-overfocus');
+          kickerEl.textContent = '집중 저하 · 휴식 제안';
         } else if (alert.type === 'resume_confirm') {
           card.classList.remove('is-overfocus');
           kickerEl.textContent = '복귀 확인';
