@@ -1,11 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchDailyArchive, saveDailyArchive } from '../api.js';
+import { fetchDailyArchive, saveDailyArchive, fetchFocusDay } from '../api.js';
 import { toLocalInputValue } from '../utils/calendarGrid.js';
 import DayWheel from './DayWheel.jsx';
 
 let idCounter = 1;
 function makeTaskId() {
   return `date-task-${idCounter++}-${Date.now()}`;
+}
+
+function formatDur(ms) {
+  if (ms == null) return '—';
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+}
+
+function formatClock(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function withOrder(items) {
@@ -31,8 +45,20 @@ export default function DatePlanEditor({
   const [error, setError] = useState(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [showWheel, setShowWheel] = useState(false);
+  const [focusSessions, setFocusSessions] = useState(null); // 이 날의 집중 세션 기록
   const saveTimerRef = useRef(null);
   const dayEndRef = useRef(null);
+
+  // 이 날짜에 집중했던 세션 기록을 불러온다(있으면 표시).
+  useEffect(() => {
+    let cancelled = false;
+    fetchFocusDay(date)
+      .then((data) => !cancelled && setFocusSessions(data.sessions || []))
+      .catch(() => !cancelled && setFocusSessions([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [date]);
 
   // 오늘이 아닌 날짜는 저장된 계획을 불러온다.
   useEffect(() => {
@@ -194,6 +220,37 @@ export default function DatePlanEditor({
                       onChange={(e) => onUpdateEvent(ev.id, { date: e.target.value })}
                     />
                     <button type="button" className="date-task-remove" onClick={() => onRemoveEvent(ev.id)} aria-label="삭제">×</button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {focusSessions && focusSessions.length > 0 && (
+            <>
+              <div className="date-editor-section-label mono">집중 기록</div>
+              <div className="focus-log-list">
+                {focusSessions.map((s) => (
+                  <div key={s.sessionId} className="focus-log-card">
+                    <div className="focus-log-head">
+                      <span className="focus-log-title">{s.taskTitle || '집중 세션'}</span>
+                      <span className="mono focus-log-time">
+                        {formatClock(s.startedAt)}{s.endedAt ? `–${formatClock(s.endedAt)}` : ' · 진행 중'}
+                      </span>
+                    </div>
+                    {s.focusApps.length > 0 && (
+                      <div className="focus-log-apps">{s.focusApps.join(', ')}</div>
+                    )}
+                    {s.completed ? (
+                      <div className="focus-log-stats">
+                        <span className="focus-log-stat tone-focus">집중 {formatDur(s.totalFocusMs)}</span>
+                        <span className="focus-log-stat tone-break">휴식 {formatDur(s.totalBreakMs)}</span>
+                        <span className="focus-log-stat tone-drift">딴짓 {formatDur(s.totalDriftMs)}</span>
+                        <span className="focus-log-stat">벗어남 {s.driftCount}회</span>
+                      </div>
+                    ) : (
+                      <div className="focus-log-stats"><span className="focus-log-stat">아직 끝나지 않은 세션이에요</span></div>
+                    )}
                   </div>
                 ))}
               </div>

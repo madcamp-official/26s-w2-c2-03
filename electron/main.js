@@ -699,7 +699,11 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.gauge = 100;
   focusSession.underfocusSnoozedUntil = 0;
 
-  logFocusEvent('session_start', { focusApps });
+  logFocusEvent('session_start', {
+    focusApps: focusApps.map((a) => a.name),
+    taskTitle: focusSession.taskTitle,
+    targetMinutes: focusSession.targetMinutes,
+  });
 
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = setInterval(pollFocus, POLL_INTERVAL_MS);

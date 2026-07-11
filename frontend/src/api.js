@@ -69,6 +69,10 @@ export function saveDailyArchive(date, tasks, dayEndTime) {
   return putJson(`/api/daily-archives/${date}`, { tasks, dayEndTime });
 }
 
+export function fetchFocusDay(date) {
+  return getJson(`/api/focus-events/day/${date}`);
+}
+
 // ---- auth ----
 
 export function sendVerificationCode({ email, password, passwordConfirm }) {

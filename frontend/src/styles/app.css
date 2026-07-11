@@ -603,3 +603,19 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
   font-size: 18px; font-weight: 650; color: var(--text-1);
   max-width: 90%; text-align: center; line-height: 1.35;
 }
+
+/* 날짜 편집기 — 집중 기록 카드 */
+.focus-log-list { display: flex; flex-direction: column; gap: 8px; }
+.focus-log-card {
+  border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--ground);
+  padding: 10px 12px;
+}
+.focus-log-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.focus-log-title { font-size: 14px; font-weight: 600; color: var(--text-1); }
+.focus-log-time { font-size: 12px; color: var(--text-2); flex: none; }
+.focus-log-apps { font-size: 11.5px; color: var(--text-2); margin-top: 3px; }
+.focus-log-stats { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
+.focus-log-stat { font-size: 12px; color: var(--text-2); }
+.focus-log-stat.tone-focus { color: var(--signal); }
+.focus-log-stat.tone-break { color: var(--noise); }
+.focus-log-stat.tone-drift { color: var(--urgent); }
