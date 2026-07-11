@@ -18,6 +18,8 @@ module.exports = {
     asar: true,
     name: 'Zonemate',
     executableName: 'Zonemate',
+    // 확장자 없이 지정 — 패키저가 플랫폼별로 .icns(mac)/.ico(win)를 붙인다.
+    icon: path.join(__dirname, 'icon'),
     extraResource: [
       path.join(__dirname, 'build-resources', 'backend'),
       path.join(__dirname, 'build-resources', 'frontend'),

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
 const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -845,7 +845,17 @@ function refreshTray() {
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, 'tray-icon.png'));
+  let trayImage;
+  if (process.platform === 'darwin') {
+    // macOS 메뉴바는 템플릿 이미지(검정+알파)를 받으면 다크/라이트에 맞춰
+    // 흰색·검정으로 자동 렌더한다. @2x는 옆에 있으면 자동으로 로드된다.
+    trayImage = nativeImage.createFromPath(path.join(__dirname, 'tray-iconTemplate.png'));
+    trayImage.setTemplateImage(true);
+  } else {
+    // 윈도우/리눅스는 템플릿을 지원하지 않으므로 흰색 아이콘을 그대로 쓴다.
+    trayImage = path.join(__dirname, 'tray-icon.png');
+  }
+  tray = new Tray(trayImage);
   tray.setToolTip('Zonemate');
   refreshTray();
 }
