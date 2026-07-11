@@ -1,18 +1,32 @@
 {
   "name": "zonemate-desktop",
+  "productName": "Zonemate",
   "version": "0.1.0",
   "private": true,
-  "description": "Zonemate 데스크톱 셸 — 프론트엔드/백엔드/집중도 트래커를 하나의 앱으로 묶는다",
+  "author": "Zonemate Team",
+  "description": "Zonemate desktop focus assistant",
   "main": "main.js",
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "smoke:windows": "set \"ELECTRON_RUN_AS_NODE=\" && set \"ELECTRON_SMOKE_TEST=1\" && electron ."
+    "smoke:windows": "set \"ELECTRON_RUN_AS_NODE=\" && set \"ELECTRON_SMOKE_TEST=1\" && electron .",
+    "build:resources": "npm --prefix ../frontend run build && node scripts/prepare-package.js",
+    "package:windows": "npm run build:resources && electron-forge package --platform=win32 --arch=x64",
+    "make:windows": "npm run build:resources && electron-forge make --platform=win32 --arch=x64 && node scripts/copy-installer.js"
   },
   "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
     "get-windows": "^9.3.0"
   },
   "devDependencies": {
-    "electron": "^33.2.0"
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
+    "electron": "^43.1.0"
+  },
+  "allowScripts": {
+    "electron@43.1.0": true,
+    "electron-winstaller@5.4.4": true,
+    "get-windows@9.3.0": true
   }
 }
