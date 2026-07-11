@@ -82,23 +82,24 @@ export default function CalendarGrid({ events, onUpdate, onRemove, tasks, setTas
           const visibleEvents = expanded ? dayEvents : dayEvents.slice(0, MAX_VISIBLE_CHIPS);
           const hiddenCount = dayEvents.length - visibleEvents.length;
 
+          const isSelectedCell = editorDate === key;
+
           return (
             <div
               key={key}
               className={[
-                'calendar-cell',
+                'calendar-cell', 'is-clickable',
                 !inMonth && 'is-outside',
                 dragOver && 'is-drag-over',
+                isSelectedCell && 'is-selected',
               ].filter(Boolean).join(' ')}
+              onClick={() => openEditor(key)}
+              title="이 날의 할 일과 일정 편집"
               onDragOver={(e) => { e.preventDefault(); setDragOverKey(key); }}
               onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
               onDrop={(e) => handleDrop(e, day)}
             >
-              <span
-                className={`calendar-cell-date mono is-clickable${today ? ' is-today' : ''}`}
-                onClick={() => openEditor(key)}
-                title="이 날의 할 일과 일정 편집"
-              >
+              <span className={`calendar-cell-date mono${today ? ' is-today' : ''}`}>
                 {day.getDate()}
               </span>
               <div className="calendar-cell-events">
@@ -108,7 +109,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove, tasks, setTas
                     className={`calendar-chip ${ev.kind === 'deadline' ? 'tag-urgent' : 'tag-signal'}`}
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData('text/plain', ev.id)}
-                    onClick={() => { setEditorDate(null); setSelectedId(ev.id); }}
+                    onClick={(e) => { e.stopPropagation(); setEditorDate(null); setSelectedId(ev.id); }}
                     title={ev.title}
                   >
                     {ev.title}
@@ -118,7 +119,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove, tasks, setTas
                   <button
                     type="button"
                     className="calendar-chip-more"
-                    onClick={() => setExpandedDayKey(key)}
+                    onClick={(e) => { e.stopPropagation(); setExpandedDayKey(key); }}
                   >
                     +{hiddenCount}개
                   </button>
@@ -127,7 +128,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove, tasks, setTas
                   <button
                     type="button"
                     className="calendar-chip-more"
-                    onClick={() => setExpandedDayKey(null)}
+                    onClick={(e) => { e.stopPropagation(); setExpandedDayKey(null); }}
                   >
                     접기
                   </button>

@@ -12,7 +12,21 @@ body {
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .page { min-height: 100%; padding-bottom: 80px; }
-.wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; transition: max-width .2s ease; }
+/* 마감/캘린더 페이지는 캘린더에 더 집중할 수 있도록 넓게 */
+.wrap-wide { max-width: 1120px; }
+
+/* 마감 등록(좌) + 캘린더(우) 가로 배치. 좁은 화면에서는 세로로 쌓음 */
+.deadlines-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.deadlines-side .panel, .deadlines-main .panel { margin-bottom: 0; }
+@media (max-width: 900px) {
+  .deadlines-layout { grid-template-columns: 1fr; }
+}
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -288,17 +302,21 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 }
 .calendar-cell.is-outside { background: var(--ground); opacity: .5; }
 .calendar-cell.is-drag-over { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--signal-dim); }
+.calendar-cell.is-clickable { cursor: pointer; transition: background .12s ease, box-shadow .12s ease; }
+.calendar-cell.is-clickable:hover { background: var(--surface-2); }
+.calendar-cell.is-selected { box-shadow: inset 0 0 0 2px var(--signal); }
+.calendar-cell.is-selected .calendar-cell-date { color: var(--signal); }
 
 .calendar-cell-date {
   font-size: 11px; color: var(--text-2); align-self: flex-start;
 }
+.calendar-cell.is-clickable:hover .calendar-cell-date { color: var(--signal); }
 .calendar-cell-date.is-today {
   background: var(--signal); color: var(--signal-ink);
   border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
   text-align: center; display: inline-block;
 }
-.calendar-cell-date.is-clickable { cursor: pointer; }
-.calendar-cell-date.is-clickable:hover { text-decoration: underline; color: var(--signal); }
+.calendar-cell.is-clickable:hover .calendar-cell-date.is-today { color: var(--signal-ink); }
 .calendar-cell-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
 
 .calendar-chip {

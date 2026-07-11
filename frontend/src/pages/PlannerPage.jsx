@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { fetchPlannerData, savePlannerData, closeDay } from '../api.js';
 import { toDateKey } from '../utils/calendarGrid.js';
@@ -73,6 +73,10 @@ export default function PlannerPage() {
   const { isDesktop, state: focusState, now: focusNow, controls: focusControls } = useFocusSession();
   const [focusModalOpen, setFocusModalOpen] = useState(false);
   const focusActive = Boolean(focusState && focusState.status !== 'idle');
+
+  // 마감/캘린더 페이지는 캘린더를 가로로 넓게 쓰도록 컨테이너를 넓힌다.
+  const location = useLocation();
+  const isDeadlines = location.pathname.startsWith('/deadlines');
 
   useEffect(() => {
     let cancelled = false;
@@ -167,7 +171,7 @@ export default function PlannerPage() {
 
   return (
     <div className="page">
-      <div className="wrap">
+      <div className={`wrap${isDeadlines ? ' wrap-wide' : ''}`}>
         <header className="topbar">
           <div className="wordmark"><b>Zone</b>mate</div>
           <div className="topbar-user">
