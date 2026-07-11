@@ -282,6 +282,20 @@ const BROADCAST_INTERVAL_MS = 1000;
 // 집중력 게이지(EMA) 평활 계수. 폴링 tick(2초)마다 갱신되며, 집중이면 +1,
 // 이탈이면 -1, 그 외(자기 창/자리비움)는 현 상태 유지 쪽으로 살짝 당긴다.
 const GAUGE_ALPHA = 0.15;
+
+// ---- 선제 알림(웰빙) 기준 ----
+// 과몰입: 쉬지 않고 이어서 집중한 시간이 이 값을 넘으면 "휴식 권장" 알림.
+// (지금 세션에는 작업별 "예정 시간" 개념이 없어서, 절대 시간 기준으로 잡았다.
+// 나중에 목표 시간이 생기면 focusEngine처럼 예정×1.5배로 바꿀 수 있다.)
+const OVERFOCUS_STREAK_MS = 50 * 60 * 1000;
+// 과몰입 알림을 무시하고 계속 집중하면, 이 간격마다 다시 권한다.
+const OVERFOCUS_REMIND_MS = 20 * 60 * 1000;
+// 집중 저하: 누적 딴짓 시간이 누적 집중 시간의 이 배수 이상이면 "잠깐 쉬고
+// 오는 걸 제안". 단 딴짓이 아래 최소치 이상일 때만(짧은 딴짓엔 안 뜨게).
+const UNDERFOCUS_DRIFT_RATIO = 1.5;
+const UNDERFOCUS_MIN_DRIFT_MS = 10 * 60 * 1000;
+// 집중 저하 알림 재알림 간격.
+const UNDERFOCUS_SNOOZE_MS = 10 * 60 * 1000;
 // 순수 시스템/배경 항목은 선택 목록에서 감춘다(앱 선택 UX를 깔끔하게).
 const SYSTEM_BUNDLE_IDS = new Set([
   'com.apple.WindowManager',
@@ -322,6 +336,10 @@ const focusSession = {
   lastReturnMs: null, // 가장 최근 이탈에서 돌아오기까지 걸린 시간
   driftCount: 0, // 세션 중 이탈한 횟수
   gauge: 100, // 집중력 게이지(0~100)
+
+  // 선제 알림(웰빙) 스누즈 — 이 시각 전에는 각각 다시 알리지 않는다.
+  overfocusSnoozedUntil: 0, // 이번 집중 streak가 새로 시작되면 0으로 리셋
+  underfocusSnoozedUntil: 0,
 };
 
 // 활성/열린 창 정보에서 플랫폼에 상관없이 앱을 식별할 키를 뽑아낸다.
@@ -421,12 +439,73 @@ function broadcastFocusState() {
 
 function startBroadcasting() {
   if (focusSession.broadcastTimer) clearInterval(focusSession.broadcastTimer);
-  focusSession.broadcastTimer = setInterval(broadcastFocusState, BROADCAST_INTERVAL_MS);
+  // 1초마다: 선제 알림(과몰입/집중 저하) 판단 후 상태를 React로 브로드캐스트.
+  focusSession.broadcastTimer = setInterval(() => {
+    evaluateWellbeingAlerts();
+    broadcastFocusState();
+  }, BROADCAST_INTERVAL_MS);
 }
 
 function stopBroadcasting() {
   if (focusSession.broadcastTimer) clearInterval(focusSession.broadcastTimer);
   focusSession.broadcastTimer = null;
+}
+
+// 새 집중 streak 시작 — 과몰입 스누즈를 리셋해서 새 집중 구간에서 다시
+// 권할 수 있게 한다.
+function beginFocusStreak(now) {
+  focusSession.focusStreakStartedAt = now;
+  focusSession.overfocusSnoozedUntil = 0;
+}
+
+// 과몰입/집중 저하 같은 선제 알림을 띄울지 1초마다 판단한다. 드리프트(이탈)
+// 알림과 겹치지 않게, 이미 알림 창이 떠 있으면 건너뛴다.
+function evaluateWellbeingAlerts() {
+  if (focusSession.status !== 'focusing') return; // 휴식 중엔 권하지 않음
+  if (alertWindow) return; // 다른 알림이 떠 있으면 스킵
+  const now = Date.now();
+
+  // 1) 과몰입: 쉬지 않고 이어서 집중한 시간이 기준을 넘음(지금 실제로 집중
+  //    앱에 있을 때만 — 이탈 중이면 streak가 아니다).
+  const focusingNow = focusSession.currentState === 'focus' && !focusSession.driftStartedAt;
+  const streakMs = focusingNow && focusSession.focusStreakStartedAt
+    ? now - focusSession.focusStreakStartedAt
+    : 0;
+  if (focusingNow && streakMs >= OVERFOCUS_STREAK_MS && now >= focusSession.overfocusSnoozedUntil) {
+    focusSession.overfocusSnoozedUntil = now + OVERFOCUS_REMIND_MS;
+    logFocusEvent('overfocus_alert', { streakMs });
+    showFocusAlert({
+      type: 'overfocus',
+      title: '오래 집중하고 있어요',
+      message: `쉬지 않고 ${Math.round(streakMs / 60000)}분째 집중 중이에요. 잠깐 쉬는 건 어때요?`,
+      actions: [
+        { id: 'take_break', label: '휴식하기', primary: true },
+        { id: 'ignore_wellbeing', label: '계속하기' },
+      ],
+    });
+    return;
+  }
+
+  // 2) 집중 저하: 누적 딴짓이 누적 집중의 1.5배 이상 + 최소 10분 이상.
+  const drift = focusSession.totalDriftMs;
+  const focus = focusSession.totalFocusMs;
+  if (
+    drift >= UNDERFOCUS_MIN_DRIFT_MS
+    && drift >= UNDERFOCUS_DRIFT_RATIO * focus
+    && now >= focusSession.underfocusSnoozedUntil
+  ) {
+    focusSession.underfocusSnoozedUntil = now + UNDERFOCUS_SNOOZE_MS;
+    logFocusEvent('underfocus_alert', { driftMs: drift, focusMs: focus });
+    showFocusAlert({
+      type: 'underfocus',
+      title: '집중이 잘 안 되고 있어요',
+      message: `지금까지 집중 ${Math.round(focus / 60000)}분, 딴짓 ${Math.round(drift / 60000)}분이에요. 시간을 정해 잠깐 쉬고 오는 건 어때요?`,
+      actions: [
+        { id: 'take_break', label: '휴식하기', primary: true },
+        { id: 'ignore_wellbeing', label: '계속하기' },
+      ],
+    });
+  }
 }
 
 function openFocusSetup() {
@@ -523,7 +602,7 @@ async function pollFocus() {
         logFocusEvent('drift_end', { durationMs: focusSession.lastReturnMs });
       }
       if (focusSession.currentState !== 'focus') {
-        focusSession.focusStreakStartedAt = now;
+        beginFocusStreak(now);
       }
       setCurrentState('focus');
       focusSession.lastFocusApp = activeApp;
@@ -576,7 +655,7 @@ function startFocusSession(focusApps) {
 
   // 통계 초기화 — 새 세션 시작이므로 게이지도 만점에서 출발한다.
   focusSession.sessionStartedAt = now;
-  focusSession.focusStreakStartedAt = now;
+  beginFocusStreak(now);
   focusSession.currentState = 'focus';
   focusSession.accountedAt = now;
   focusSession.totalFocusMs = 0;
@@ -585,6 +664,7 @@ function startFocusSession(focusApps) {
   focusSession.lastReturnMs = null;
   focusSession.driftCount = 0;
   focusSession.gauge = 100;
+  focusSession.underfocusSnoozedUntil = 0;
 
   logFocusEvent('session_start', { focusApps });
 
@@ -668,7 +748,7 @@ function endBreak(reason) {
   focusSession.breakStartedAt = null;
   focusSession.status = 'focusing';
   // 휴식 종료 = 새 집중 streak 시작.
-  focusSession.focusStreakStartedAt = now;
+  beginFocusStreak(now);
   setCurrentState('focus', now);
 
   logFocusEvent('break_end', { reason });
@@ -741,6 +821,20 @@ ipcMain.on('alert-action', (event, action) => {
     return;
   }
 
+  if (action.actionId === 'take_break') {
+    // 과몰입/집중 저하 알림에서 휴식 선택 — 시간 선택 창을 연다.
+    if (win && !win.isDestroyed()) win.close();
+    openBreakPicker();
+    return;
+  }
+
+  if (action.actionId === 'ignore_wellbeing') {
+    // 과몰입/집중 저하 알림을 무시하고 계속 — 스누즈는 알림을 띄울 때 이미
+    // 걸어놨으므로 여기서는 그냥 닫기만 한다.
+    if (win && !win.isDestroyed()) win.close();
+    return;
+  }
+
   if (action.actionId === 'ignore') {
     // 5분간 재알림하지 않는다(이탈 자체는 계속 추적 — 무시했다고 해서
     // 실제로 벗어나 있던 시간 기록이 사라지면 안 되니까). 이번 이탈은
@@ -760,7 +854,7 @@ ipcMain.on('alert-action', (event, action) => {
     focusSession.driftAppName = null;
     focusSession.ignoredCurrentDrift = false;
     focusSession.snoozedUntil = 0;
-    focusSession.focusStreakStartedAt = now;
+    beginFocusStreak(now);
     setCurrentState('focus', now);
     broadcastFocusState();
   }
