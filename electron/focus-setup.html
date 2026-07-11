@@ -106,7 +106,7 @@
       const countEl = document.getElementById('count');
       const startBtn = document.getElementById('startBtn');
       const cancelBtn = document.getElementById('cancelBtn');
-      const selected = new Map(); // bundleId -> name
+      const selected = new Map(); // appId -> app info
 
       function refreshCount() {
         countEl.textContent = `${selected.size}개 선택됨`;
@@ -126,8 +126,8 @@
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.addEventListener('change', () => {
-            if (cb.checked) selected.set(app.bundleId, app.name);
-            else selected.delete(app.bundleId);
+            if (cb.checked) selected.set(app.appId, app);
+            else selected.delete(app.appId);
             refreshCount();
           });
           const name = document.createElement('span');
@@ -135,14 +135,14 @@
           name.textContent = app.name;
           const bundle = document.createElement('span');
           bundle.className = 'app-bundle';
-          bundle.textContent = app.bundleId || '';
+          bundle.textContent = app.bundleId || app.path || app.appId || '';
           row.append(cb, name, bundle);
           listEl.appendChild(row);
         }
       }
 
       startBtn.addEventListener('click', () => {
-        const focusApps = [...selected.entries()].map(([bundleId, name]) => ({ bundleId, name }));
+        const focusApps = [...selected.values()];
         window.focusSetup.startSession(focusApps);
       });
       cancelBtn.addEventListener('click', () => window.focusSetup.cancel());

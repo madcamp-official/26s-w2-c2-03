@@ -16,6 +16,7 @@ const BACKEND_DIR = path.join(ROOT, 'backend');
 const FRONTEND_DIR = path.join(ROOT, 'frontend');
 const FRONTEND_URL = 'http://localhost:5173';
 const BACKEND_HEALTH_URL = 'http://localhost:4000/api/health';
+const SMOKE_TEST = process.env.ELECTRON_SMOKE_TEST === '1';
 
 let backendProcess = null;
 let frontendProcess = null;
@@ -40,19 +41,28 @@ function startBackend() {
   backendProcess.on('exit', (code) => {
     console.log(`[electron] 백엔드 프로세스 종료 (code: ${code})`);
   });
+  backendProcess.on('error', (err) => {
+    console.error('[electron] 백엔드 프로세스 시작 실패:', err.message);
+  });
 }
 
 // 개발 중에는 Vite dev 서버를 그대로 띄워서 프론트엔드 HMR을 유지한다.
 // 프로덕션 빌드 시에는 이 대신 정적 빌드 결과물을 loadFile로 읽으면 된다
 // (아직 배포는 고려 안 함, 지금은 "감싸기"가 실제로 되는지 검증이 목적).
 function startFrontend() {
-  const viteBin = path.join(FRONTEND_DIR, 'node_modules', '.bin', 'vite');
-  frontendProcess = spawn(viteBin, ['--port', '5173'], {
+  // Windows의 node_modules/.bin/vite는 vite.cmd라 shell 없이 직접 spawn하면
+  // 실행되지 않을 수 있다. 실제 JS 진입점을 시스템 Node로 실행하면 양쪽 OS에서
+  // 같은 명령을 사용할 수 있고, 백엔드의 Node 22+ 요구사항과도 일치한다.
+  const viteEntry = path.join(FRONTEND_DIR, 'node_modules', 'vite', 'bin', 'vite.js');
+  frontendProcess = spawn('node', [viteEntry, '--port', '5173', '--strictPort'], {
     cwd: FRONTEND_DIR,
     stdio: 'inherit',
   });
   frontendProcess.on('exit', (code) => {
     console.log(`[electron] 프론트엔드 프로세스 종료 (code: ${code})`);
+  });
+  frontendProcess.on('error', (err) => {
+    console.error('[electron] 프론트엔드 프로세스 시작 실패:', err.message);
   });
 }
 
@@ -82,6 +92,22 @@ function createWindow() {
     title: 'Zonemate',
   });
   mainWindow.loadURL(FRONTEND_URL);
+  if (SMOKE_TEST) {
+    mainWindow.webContents.once('did-finish-load', async () => {
+      try {
+        const apps = await getOpenAppList();
+        if (apps.length === 0 || apps.some((item) => !item.appId || !item.name)) {
+          throw new Error('Windows 열린 앱 목록 또는 appId가 비어 있음');
+        }
+        console.log(`[electron] SMOKE_APPS_OK — 열린 앱 ${apps.length}개 조회`);
+        console.log('[electron] SMOKE_TEST_OK — 메인 창 로드 완료');
+      } catch (err) {
+        console.error('[electron] SMOKE_TEST_FAILED:', err.message);
+        process.exitCode = 1;
+      }
+      setTimeout(() => app.quit(), 500);
+    });
+  }
 }
 
 // OS 알림센터의 액션 버튼은 macOS(특히 개발 모드/최신 버전)에서 너무
@@ -141,25 +167,46 @@ function showFocusAlert(alert) {
   });
 }
 
-// macOS에서 이미 실행 중인 앱을 포커스로 가져온다. osascript(자동화 권한
-// 필요)와 달리 `open -b <bundleId>`는 추가 권한 없이 앱을 앞으로 올려준다.
-// (Windows는 나중에 processId 기반으로 SetForegroundWindow 등을 붙인다.)
-function activateApp(bundleId) {
-  if (!bundleId) return;
+// 집중하던 앱을 다시 포커스로 가져온다.
+// macOS는 bundleId, Windows는 WScript.Shell.AppActivate(PID)를 사용한다.
+function activateApp(appInfo) {
+  if (!appInfo) return;
   if (process.platform === 'darwin') {
-    execFile('open', ['-b', bundleId], (err) => {
-      if (err) console.error('[electron] 앱 활성화 실패:', bundleId, err.message);
+    if (!appInfo.bundleId) return;
+    execFile('open', ['-b', appInfo.bundleId], (err) => {
+      if (err) console.error('[electron] 앱 활성화 실패:', appInfo.bundleId, err.message);
+    });
+  } else if (process.platform === 'win32') {
+    const processId = Number(appInfo.processId);
+    if (!Number.isInteger(processId) || processId <= 0) return;
+    const script = `$shell = New-Object -ComObject WScript.Shell; if (-not $shell.AppActivate(${processId})) { exit 1 }`;
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], (err) => {
+      if (err) console.error('[electron] 앱 활성화 실패 (PID):', processId, err.message);
     });
   }
+}
+
+function isServerReady(url) {
+  return new Promise((resolve) => {
+    const request = http.get(url, (res) => {
+      res.resume();
+      resolve(res.statusCode >= 200 && res.statusCode < 500);
+    });
+    request.setTimeout(1500, () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on('error', () => resolve(false));
+  });
 }
 
 // 플로팅 알림 창의 버튼에서 올라온 사용자 선택을 처리한다.
 ipcMain.on('alert-action', (event, action) => {
   console.log('[electron] 알림 액션 선택됨:', JSON.stringify(action));
 
-  if (action.actionId === 'return' && focusSession.lastFocusBundleId) {
+  if (action.actionId === 'return' && focusSession.lastFocusApp) {
     // 이탈 직전에 집중하고 있던 앱으로 되돌린다.
-    activateApp(focusSession.lastFocusBundleId);
+    activateApp(focusSession.lastFocusApp);
   }
 
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -167,7 +214,7 @@ ipcMain.on('alert-action', (event, action) => {
 });
 
 // ---- 집중 세션 ----
-// 사용자가 "집중 시작" 시 고른 앱들(focusBundleIds)에 있는 동안은 집중으로
+// 사용자가 "집중 시작" 시 고른 앱들(focusAppIds)에 있는 동안은 집중으로
 // 보고, 그 외 창으로 벗어난 시간이 임계값을 넘으면 알림을 띄운다.
 
 // 테스트 편의를 위해 임계값을 아주 짧게(6초) 잡아둔다. 실제 배포에서는
@@ -186,22 +233,37 @@ const SYSTEM_BUNDLE_IDS = new Set([
 let focusSetupWindow = null;
 const focusSession = {
   active: false,
-  focusBundleIds: new Set(),
+  focusAppIds: new Set(),
   timer: null,
   driftSeconds: 0,
   alerted: false,
-  lastFocusBundleId: null, // 마지막으로 집중 앱에 있었던 순간의 bundleId
+  lastFocusApp: null,
 };
+
+function appIdentity(windowInfo) {
+  const owner = windowInfo?.owner;
+  if (!owner?.name) return null;
+  const appId = process.platform === 'darwin'
+    ? owner.bundleId
+    : owner.path || owner.name;
+  if (!appId) return null;
+  return {
+    appId,
+    name: owner.name,
+    bundleId: owner.bundleId || null,
+    processId: owner.processId || null,
+    path: owner.path || null,
+  };
+}
 
 async function getOpenAppList() {
   const { openWindows } = await loadGetWindows();
   const windows = await openWindows({ accessibilityPermission: false, screenRecordingPermission: false });
   const seen = new Map();
   for (const w of windows) {
-    const bundleId = w.owner?.bundleId;
-    const name = w.owner?.name;
-    if (!bundleId || !name || SYSTEM_BUNDLE_IDS.has(bundleId)) continue;
-    if (!seen.has(bundleId)) seen.set(bundleId, { bundleId, name });
+    const appInfo = appIdentity(w);
+    if (!appInfo || SYSTEM_BUNDLE_IDS.has(appInfo.bundleId)) continue;
+    if (!seen.has(appInfo.appId)) seen.set(appInfo.appId, appInfo);
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
@@ -233,11 +295,11 @@ async function pollFocus() {
   try {
     const { activeWindow } = await loadGetWindows();
     const info = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
-    const bundleId = info?.owner?.bundleId || null;
-    const onFocusApp = bundleId && focusSession.focusBundleIds.has(bundleId);
+    const activeApp = appIdentity(info);
+    const onFocusApp = activeApp && focusSession.focusAppIds.has(activeApp.appId);
 
     if (onFocusApp) {
-      focusSession.lastFocusBundleId = bundleId;
+      focusSession.lastFocusApp = activeApp;
       focusSession.driftSeconds = 0;
       focusSession.alerted = false;
     } else {
@@ -263,10 +325,10 @@ async function pollFocus() {
 
 function startFocusSession(focusApps) {
   focusSession.active = true;
-  focusSession.focusBundleIds = new Set(focusApps.map((a) => a.bundleId));
+  focusSession.focusAppIds = new Set(focusApps.map((a) => a.appId));
   focusSession.driftSeconds = 0;
   focusSession.alerted = false;
-  focusSession.lastFocusBundleId = focusApps[0]?.bundleId || null;
+  focusSession.lastFocusApp = focusApps[0] || null;
   if (focusSession.timer) clearInterval(focusSession.timer);
   focusSession.timer = setInterval(pollFocus, POLL_INTERVAL_MS);
   console.log('[electron] 집중 세션 시작 — 집중 앱:', focusApps.map((a) => a.name).join(', '));
@@ -297,8 +359,16 @@ ipcMain.on('cancel-focus-setup', () => {
 });
 
 app.whenReady().then(async () => {
-  startBackend();
-  startFrontend();
+  const [backendAlreadyRunning, frontendAlreadyRunning] = await Promise.all([
+    isServerReady(BACKEND_HEALTH_URL),
+    isServerReady(FRONTEND_URL),
+  ]);
+
+  if (backendAlreadyRunning) console.log('[electron] 기존 백엔드(4000)를 재사용합니다.');
+  else startBackend();
+
+  if (frontendAlreadyRunning) console.log('[electron] 기존 Vite(5173)를 재사용합니다.');
+  else startFrontend();
 
   try {
     await Promise.all([
@@ -314,7 +384,7 @@ app.whenReady().then(async () => {
 
   // 테스트 편의: 앱이 뜨면 바로 집중 설정 창을 연다. 실제 서비스에서는
   // 메인 UI의 "집중하기" 버튼이 openFocusSetup()을 호출하는 형태가 된다.
-  setTimeout(openFocusSetup, 1500);
+  if (!SMOKE_TEST) setTimeout(openFocusSetup, 1500);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
