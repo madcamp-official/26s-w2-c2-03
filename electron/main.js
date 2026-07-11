@@ -185,6 +185,10 @@ function showFocusAlert(alert) {
     fullscreenable: false,
     show: false,
     hasShadow: false,
+    // macOS에서 'panel'로 만들면 앱이 비활성화돼도(다른 앱을 클릭해도) 창이
+    // 뒤로 밀려나거나 사라지지 않고 계속 떠 있는다. 일반 window 타입은 앱
+    // 전체가 뒷단으로 갈 때 같이 딸려 내려가서 알림이 사라져 보였다.
+    type: process.platform === 'darwin' ? 'panel' : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'alert-preload.js'),
       contextIsolation: true,
@@ -192,8 +196,15 @@ function showFocusAlert(alert) {
     },
   });
 
+  // screen-saver 레벨 + 모든 워크스페이스(스페이스/전체화면 포함)에서 보이도록
+  // 해서, 어떤 앱을 쓰고 있든 그 위에 계속 알림이 떠 있게 한다.
   alertWindow.setAlwaysOnTop(true, 'screen-saver');
   alertWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // 앱이 다른 앱에 포커스를 내줘도 이 창은 화면에 계속 두게 한다(Stage
+  // Manager로 앱을 못 찾아 되돌아오지 못하는 상황 방지).
+  if (process.platform === 'darwin' && alertWindow.setHiddenInMissionControl) {
+    alertWindow.setHiddenInMissionControl(false);
+  }
   alertWindow.loadFile(path.join(__dirname, 'alert.html'));
 
   alertWindow.webContents.once('did-finish-load', () => {
@@ -224,6 +235,25 @@ function activateApp(appInfo) {
       if (err) console.error('[electron] 앱 활성화 실패 (PID):', processId, err.message);
     });
   }
+}
+
+// "돌아가기"를 눌렀을 때 부르는 함수. 직전에 우연히 활성화됐던 아무 앱이
+// 아니라, 사용자가 집중 시작 때 직접 고른 집중 앱(들)을 앞으로 가져온다.
+// 집중 앱을 여러 개 골랐으면(예: 듀얼 모니터로 Claude+VSCode) 전부 활성화하되
+// 마지막에 있던 집중 앱(lastFocusApp)을 맨 마지막에 올려 최종 포커스로 둔다.
+function activateFocusApps() {
+  const apps = focusSession.focusApps || [];
+  const last = focusSession.lastFocusApp;
+  // lastFocusApp을 제일 마지막에 활성화하려고 순서를 맞춘다.
+  const ordered = [
+    ...apps.filter((a) => !last || a.appId !== last.appId),
+    ...(last ? [last] : []),
+  ];
+  const targets = ordered.length ? ordered : (last ? [last] : []);
+  targets.forEach((appInfo, index) => {
+    // 순차 활성화가 서로 덮어쓰지 않도록 약간의 간격을 둔다.
+    setTimeout(() => activateApp(appInfo), index * 120);
+  });
 }
 
 // ---- 집중 세션 상태 ----
@@ -344,6 +374,14 @@ function openBreakPicker() {
 async function pollFocus() {
   if (focusSession.status !== 'focusing') return;
   try {
+    // Zonemate 자기 자신은 집중 대상에서 항상 제외한다 — 집중 중 대시보드나
+    // 알림/설정 창을 보고 있는 건 이탈도 집중도 아니므로 아무 것도 세지 않고
+    // 그냥 넘어간다. 하드코딩된 bundleId 대신 우리 창이 포커스됐는지로 판별해
+    // 개발/배포 환경에 상관없이 동작하게 한다.
+    const isSelfFocused = BrowserWindow.getAllWindows()
+      .some((w) => !w.isDestroyed() && w.isFocused());
+    if (isSelfFocused) return;
+
     const { activeWindow } = await loadGetWindows();
     const info = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
     const activeApp = appIdentity(info);
@@ -538,10 +576,18 @@ ipcMain.on('alert-action', (event, action) => {
   console.log('[electron] 알림 액션 선택됨:', JSON.stringify(action));
   logFocusEvent('alert_action', action);
 
-  if (action.actionId === 'return' && focusSession.lastFocusApp) {
-    // 이탈 직전에 집중하고 있던 앱으로 되돌린다.
-    activateApp(focusSession.lastFocusApp);
-  } else if (action.actionId === 'ignore') {
+  const win = BrowserWindow.fromWebContents(event.sender);
+
+  if (action.actionId === 'return') {
+    // 알림 창을 먼저 닫고(닫으면 macOS가 직전 활성 앱=딴짓하던 앱으로 포커스를
+    // 되돌리려 하므로), 살짝 뒤에 집중 앱을 활성화해서 그쪽이 최종적으로 이기게
+    // 한다. 이 순서를 안 지키면 "가장 최근에 켜져 있던 앱"으로 되돌아가 버린다.
+    if (win && !win.isDestroyed()) win.close();
+    setTimeout(activateFocusApps, 150);
+    return;
+  }
+
+  if (action.actionId === 'ignore') {
     // 5분간 재알림하지 않는다(이탈 자체는 계속 추적 — 무시했다고 해서
     // 실제로 벗어나 있던 시간 기록이 사라지면 안 되니까). 이번 이탈은
     // "무시됨"으로 표시해서, 나중에 자연 복귀했을 때 자동으로 종료 처리하지
@@ -561,7 +607,6 @@ ipcMain.on('alert-action', (event, action) => {
     focusSession.snoozedUntil = 0;
   }
 
-  const win = BrowserWindow.fromWebContents(event.sender);
   if (win && !win.isDestroyed()) win.close();
 });
 
