@@ -107,4 +107,12 @@ for (const column of ['start_time TEXT', 'source_event_id TEXT']) {
   }
 }
 
+// daily_archives에 그날의 하루 마무리(마감) 시간을 함께 기록하려고 나중에
+// 추가한 컬럼. 위와 같은 이유로 기존 DB에는 ALTER로 채운다.
+try {
+  db.exec('ALTER TABLE daily_archives ADD COLUMN day_end_time TEXT');
+} catch {
+  // 컬럼이 이미 존재하는 경우
+}
+
 export default db;

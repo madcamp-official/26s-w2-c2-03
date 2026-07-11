@@ -3,6 +3,9 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { fetchPlannerData, savePlannerData, closeDay } from '../api.js';
 import { toDateKey } from '../utils/calendarGrid.js';
+import { useFocusSession } from '../hooks/useFocusSession.js';
+import FocusMode from '../components/FocusMode.jsx';
+import FocusStartModal from '../components/FocusStartModal.jsx';
 
 let eventCounter = 1;
 function makeEventId() {
@@ -65,6 +68,12 @@ export default function PlannerPage() {
   const closingRef = useRef(false);
   const { user, logout } = useAuth();
 
+  // 데스크톱(일렉트론)에서만 켜지는 집중 모드. 웹 브라우저에서는 isDesktop이
+  // false라 아무 것도 렌더링하지 않는다.
+  const { isDesktop, state: focusState, now: focusNow, controls: focusControls } = useFocusSession();
+  const [focusModalOpen, setFocusModalOpen] = useState(false);
+  const focusActive = Boolean(focusState && focusState.status !== 'idle');
+
   useEffect(() => {
     let cancelled = false;
 
@@ -112,7 +121,7 @@ export default function PlannerPage() {
 
       closingRef.current = true;
       const dateToClose = dayEndDate;
-      closeDay(dateToClose, tasks)
+      closeDay(dateToClose, tasks, dayEndTime)
         .then(() => {
           setTasks([]);
           setDayEndTime(null);
@@ -150,16 +159,31 @@ export default function PlannerPage() {
     setDayEndDate(time ? resolveDayEndDate(time) : null);
   }
 
+  // 집중 모드가 켜져 있으면 다른 화면(플래너/캘린더)을 전부 덮고 집중 대시보드만
+  // 보여준다 — "집중 중에는 다른 화면이 나오지 않도록" 요청 반영.
+  if (isDesktop && focusActive) {
+    return <FocusMode state={focusState} now={focusNow} controls={focusControls} />;
+  }
+
   return (
     <div className="page">
       <div className="wrap">
         <header className="topbar">
           <div className="wordmark"><b>Zone</b>mate</div>
           <div className="topbar-user">
+            {isDesktop && (
+              <button type="button" className="btn-primary" onClick={() => setFocusModalOpen(true)}>
+                집중하기
+              </button>
+            )}
             <span className="mono">{user?.nickname}님</span>
             <button type="button" className="btn-ghost" onClick={logout}>로그아웃</button>
           </div>
         </header>
+
+        {focusModalOpen && (
+          <FocusStartModal controls={focusControls} onClose={() => setFocusModalOpen(false)} />
+        )}
 
         <nav className="page-nav">
           <NavLink to="/today" className={navLinkClassName}>오늘의 계획</NavLink>

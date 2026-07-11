@@ -105,6 +105,9 @@
         if (alert.type === 'overfocus') {
           card.classList.add('is-overfocus');
           kickerEl.textContent = '과몰입 신호';
+        } else if (alert.type === 'resume_confirm') {
+          card.classList.remove('is-overfocus');
+          kickerEl.textContent = '복귀 확인';
         } else {
           card.classList.remove('is-overfocus');
           kickerEl.textContent = '이탈 신호';

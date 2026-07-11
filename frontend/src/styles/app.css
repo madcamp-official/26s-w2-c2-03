@@ -340,3 +340,148 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 .calendar-archive-check { width: 16px; text-align: center; color: var(--signal); flex: none; }
 .calendar-archive-title { flex: 1; }
 .calendar-archive-time { color: var(--text-2); }
+
+/* ==== 집중 모드 (데스크톱 전용) ==== */
+
+/* 토바의 집중하기 버튼은 세로 정렬만 맞춘다(.btn-primary 기본 margin-top 제거) */
+.topbar-user .btn-primary { margin-top: 0; }
+
+.btn-danger {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em;
+  border-radius: var(--radius); cursor: pointer; text-transform: uppercase;
+  background: var(--surface); border: 1px solid var(--urgent); color: var(--urgent);
+  padding: 10px 18px;
+}
+.btn-danger:hover { background: var(--urgent); color: var(--signal-ink); }
+
+/* ---- 집중 시작 모달 ---- */
+.focus-modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(20, 17, 13, 0.45);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.focus-modal {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  width: 100%; max-width: 460px; max-height: 82vh; display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.28); overflow: hidden;
+}
+.focus-modal-head { padding: 20px 22px 12px; }
+.focus-modal-head .kicker {
+  font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2);
+}
+.focus-modal-head h2 { font-size: 17px; margin: 6px 0 0; }
+.focus-app-list { padding: 4px 12px; overflow-y: auto; flex: 1; }
+.focus-app-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: var(--radius); cursor: pointer;
+}
+.focus-app-row:hover { background: var(--surface-2); }
+.focus-app-row.is-selected { background: var(--surface-2); }
+.focus-app-name { flex: 1; font-size: 14px; color: var(--text-1); }
+.focus-app-id { font-size: 10.5px; color: var(--text-2); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-modal-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px; border-top: 1px solid var(--line);
+}
+.focus-modal-actions { display: flex; gap: 8px; }
+.focus-modal-actions .btn-primary { margin-top: 0; }
+
+/* ---- 집중 중 전체화면 대시보드 ---- */
+.focus-mode {
+  position: fixed; inset: 0; z-index: 50;
+  background: var(--ground);
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px; overflow-y: auto;
+}
+.focus-mode-inner {
+  width: 100%; max-width: 640px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.focus-status-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line);
+  color: var(--text-2); background: var(--surface);
+}
+.focus-status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.focus-status-pill.tone-focus { color: var(--signal); border-color: var(--signal-dim); }
+.focus-status-pill.tone-drift { color: var(--urgent); border-color: var(--urgent); }
+.focus-status-pill.tone-break { color: var(--noise); border-color: var(--noise); }
+
+.gauge-ring { margin: 22px 0 4px; }
+.gauge-value { font-family: var(--font-mono); font-size: 46px; font-weight: 600; fill: var(--text-1); }
+.gauge-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; fill: var(--text-2); }
+
+.focus-primary { margin-top: 4px; }
+.focus-primary-value { font-size: 40px; font-weight: 600; color: var(--text-1); line-height: 1.1; }
+.focus-primary-value.tone-drift { color: var(--urgent); }
+.focus-primary-label { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+.focus-apps-line { margin-top: 10px; }
+
+.focus-stats {
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+  margin-top: 26px; width: 100%;
+}
+.focus-stat {
+  flex: 1 1 110px; min-width: 100px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 10px;
+}
+.focus-stat-value { font-size: 19px; font-weight: 600; color: var(--text-1); }
+.focus-stat-label { font-size: 11.5px; color: var(--text-2); margin-top: 5px; }
+.focus-stat.tone-focus .focus-stat-value { color: var(--signal); }
+.focus-stat.tone-drift .focus-stat-value { color: var(--urgent); }
+.focus-stat.tone-break .focus-stat-value { color: var(--noise); }
+
+.focus-controls {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+  margin-top: 30px;
+}
+.focus-controls .btn-primary, .focus-controls .btn-ghost { margin-top: 0; align-self: auto; }
+.break-inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.break-custom-input {
+  width: 64px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); font-size: 13px;
+}
+
+/* ==== 날짜별 계획 편집기 (캘린더에서 날짜 클릭) ==== */
+.date-editor {
+  margin-top: 16px; padding: 16px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--surface);
+}
+.date-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.date-editor-today { color: var(--signal); }
+.date-editor-saved { color: var(--noise); }
+.date-editor-section-label {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2);
+  margin: 16px 0 8px;
+}
+.date-task-list { display: flex; flex-direction: column; gap: 6px; }
+.date-task-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--ground);
+}
+.date-task-row.is-done .date-task-title { text-decoration: line-through; color: var(--text-2); }
+.date-task-title {
+  flex: 1; min-width: 0; border: none; background: transparent; font-size: 14px;
+  color: var(--text-1); padding: 4px 2px;
+}
+.date-task-title:focus { outline: none; border-bottom: 1px solid var(--signal-dim); }
+.date-task-time { width: 96px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 4px 6px; font-size: 12px; }
+.date-task-min { width: 56px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 4px 6px; font-size: 12px; text-align: right; }
+.date-task-unit { font-size: 12px; color: var(--text-2); }
+.date-task-remove {
+  border: none; background: none; color: var(--text-2); cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 0 4px;
+}
+.date-task-remove:hover { color: var(--urgent); }
+.date-editor-add { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.date-event-list { display: flex; flex-direction: column; gap: 6px; }
+.date-event-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--ground);
+}
+.date-event-title { flex: 1; min-width: 0; border: none; background: transparent; font-size: 14px; color: var(--text-1); padding: 4px 2px; }
+.date-event-title:focus { outline: none; border-bottom: 1px solid var(--signal-dim); }
+.date-event-time { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 4px 6px; font-size: 12px; }
