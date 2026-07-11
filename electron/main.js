@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu } = require('electron');
 const { spawn, execFile } = require('node:child_process');
+const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const http = require('node:http');
 
@@ -16,10 +17,12 @@ const BACKEND_DIR = path.join(ROOT, 'backend');
 const FRONTEND_DIR = path.join(ROOT, 'frontend');
 const FRONTEND_URL = 'http://localhost:5173';
 const BACKEND_HEALTH_URL = 'http://localhost:4000/api/health';
+const FOCUS_EVENTS_URL = 'http://localhost:4000/api/focus-events';
 
 let backendProcess = null;
 let frontendProcess = null;
 let mainWindow = null;
+let tray = null;
 
 // 백엔드는 자식 프로세스로 띄운다. Electron 메인 프로세스에 바로 import해서
 // 합칠 수도 있지만(같은 Node 환경이니까), node:sqlite가 동기 방식이라 그렇게
@@ -82,6 +85,24 @@ function createWindow() {
     title: 'Zonemate',
   });
   mainWindow.loadURL(FRONTEND_URL);
+}
+
+// 대시보드용 기록 — 세션/이탈/휴식 이벤트를 백엔드에 남긴다. 지금은 인증
+// 없이 기기 단위로만 기록한다(Electron 메인 프로세스는 브라우저 로그인
+// 쿠키가 없어서, 로그인 사용자와 제대로 묶으려면 별도 인증 브릿지가 필요 —
+// 그건 대시보드를 실제로 만들 때 같이 풀 문제). 네트워크 실패는 로그만
+// 남기고 무시한다 — 기록 실패가 집중 세션 자체를 막아서는 안 된다.
+function logFocusEvent(type, meta) {
+  if (!focusSession.id) return;
+  const payload = JSON.stringify({ sessionId: focusSession.id, clientId: 'zonemate-desktop', type, meta });
+  const req = http.request(
+    FOCUS_EVENTS_URL,
+    { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } },
+    (res) => res.resume(),
+  );
+  req.on('error', (err) => console.error('[electron] 집중 이벤트 기록 실패:', err.message));
+  req.write(payload);
+  req.end();
 }
 
 // OS 알림센터의 액션 버튼은 macOS(특히 개발 모드/최신 버전)에서 너무
@@ -153,26 +174,15 @@ function activateApp(bundleId) {
   }
 }
 
-// 플로팅 알림 창의 버튼에서 올라온 사용자 선택을 처리한다.
-ipcMain.on('alert-action', (event, action) => {
-  console.log('[electron] 알림 액션 선택됨:', JSON.stringify(action));
-
-  if (action.actionId === 'return' && focusSession.lastFocusBundleId) {
-    // 이탈 직전에 집중하고 있던 앱으로 되돌린다.
-    activateApp(focusSession.lastFocusBundleId);
-  }
-
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (win && !win.isDestroyed()) win.close();
-});
-
-// ---- 집중 세션 ----
-// 사용자가 "집중 시작" 시 고른 앱들(focusBundleIds)에 있는 동안은 집중으로
-// 보고, 그 외 창으로 벗어난 시간이 임계값을 넘으면 알림을 띄운다.
+// ---- 집중 세션 상태 ----
+// idle(대기) -> focusing(집중 중) -> onBreak(휴식 중) -> focusing -> ...
+// "집중 멈추기"는 idle로 완전히 돌아가는 것이고, "휴식하기"는 세션을 끝내지
+// 않은 채 잠깐 멈추는 것 — 이 둘을 구분해달라는 요청 반영.
 
 // 테스트 편의를 위해 임계값을 아주 짧게(6초) 잡아둔다. 실제 배포에서는
 // 30초~수 분 수준으로 올린다.
-const DRIFT_ALERT_SECONDS = 6;
+const DRIFT_ALERT_MS = 6 * 1000;
+const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
 // 순수 시스템/배경 항목은 선택 목록에서 감춘다(앱 선택 UX를 깔끔하게).
 const SYSTEM_BUNDLE_IDS = new Set([
@@ -184,13 +194,20 @@ const SYSTEM_BUNDLE_IDS = new Set([
 ]);
 
 let focusSetupWindow = null;
+let breakPickerWindow = null;
+
 const focusSession = {
-  active: false,
+  id: null,
+  status: 'idle', // 'idle' | 'focusing' | 'onBreak'
+  focusApps: [],
   focusBundleIds: new Set(),
-  timer: null,
-  driftSeconds: 0,
-  alerted: false,
+  pollTimer: null,
+  driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
+  driftAppName: null,
+  snoozedUntil: 0, // 이 시각까지는 재알림하지 않음
   lastFocusBundleId: null, // 마지막으로 집중 앱에 있었던 순간의 bundleId
+  breakTimer: null,
+  breakEndsAt: null,
 };
 
 async function getOpenAppList() {
@@ -207,6 +224,7 @@ async function getOpenAppList() {
 }
 
 function openFocusSetup() {
+  if (focusSession.status !== 'idle') return;
   if (focusSetupWindow && !focusSetupWindow.isDestroyed()) {
     focusSetupWindow.focus();
     return;
@@ -228,33 +246,69 @@ function openFocusSetup() {
   });
 }
 
+function openBreakPicker() {
+  if (focusSession.status !== 'focusing') return;
+  if (breakPickerWindow && !breakPickerWindow.isDestroyed()) {
+    breakPickerWindow.focus();
+    return;
+  }
+  breakPickerWindow = new BrowserWindow({
+    width: 360,
+    height: 340,
+    title: '휴식하기',
+    resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'break-picker-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  breakPickerWindow.loadFile(path.join(__dirname, 'break-picker.html'));
+  breakPickerWindow.on('closed', () => {
+    breakPickerWindow = null;
+  });
+}
+
 async function pollFocus() {
-  if (!focusSession.active) return;
+  if (focusSession.status !== 'focusing') return;
   try {
     const { activeWindow } = await loadGetWindows();
     const info = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
     const bundleId = info?.owner?.bundleId || null;
     const onFocusApp = bundleId && focusSession.focusBundleIds.has(bundleId);
+    const now = Date.now();
 
     if (onFocusApp) {
-      focusSession.lastFocusBundleId = bundleId;
-      focusSession.driftSeconds = 0;
-      focusSession.alerted = false;
-    } else {
-      focusSession.driftSeconds += POLL_INTERVAL_MS / 1000;
-      if (!focusSession.alerted && focusSession.driftSeconds >= DRIFT_ALERT_SECONDS) {
-        focusSession.alerted = true;
-        const driftAppName = info?.owner?.name || '다른 창';
-        showFocusAlert({
-          type: 'drift',
-          title: '집중하던 앱에서 벗어났어요',
-          message: `${Math.round(focusSession.driftSeconds)}초째 "${driftAppName}"에 있어요.`,
-          actions: [
-            { id: 'return', label: '돌아가기', primary: true },
-            { id: 'ignore', label: '무시하기' },
-          ],
-        });
+      if (focusSession.driftStartedAt) {
+        logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt });
       }
+      focusSession.lastFocusBundleId = bundleId;
+      focusSession.driftStartedAt = null;
+      focusSession.driftAppName = null;
+      if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
+      return;
+    }
+
+    if (!focusSession.driftStartedAt) {
+      focusSession.driftStartedAt = now;
+      focusSession.driftAppName = info?.owner?.name || '다른 창';
+      logFocusEvent('drift_start', { toApp: focusSession.driftAppName });
+    }
+
+    const driftMs = now - focusSession.driftStartedAt;
+    const shouldAlert = driftMs >= DRIFT_ALERT_MS && now >= focusSession.snoozedUntil && !alertWindow;
+    if (shouldAlert) {
+      logFocusEvent('alert_shown', { toApp: focusSession.driftAppName });
+      showFocusAlert({
+        type: 'drift',
+        title: '집중하던 앱에서 벗어났어요',
+        driftStartedAt: focusSession.driftStartedAt,
+        driftAppName: focusSession.driftAppName,
+        actions: [
+          { id: 'return', label: '돌아가기', primary: true },
+          { id: 'ignore', label: '무시하기' },
+        ],
+      });
     }
   } catch (err) {
     console.error('[electron] 활성 창 확인 실패:', err.stdout || err.message);
@@ -262,21 +316,143 @@ async function pollFocus() {
 }
 
 function startFocusSession(focusApps) {
-  focusSession.active = true;
+  focusSession.id = randomUUID();
+  focusSession.status = 'focusing';
+  focusSession.focusApps = focusApps;
   focusSession.focusBundleIds = new Set(focusApps.map((a) => a.bundleId));
-  focusSession.driftSeconds = 0;
-  focusSession.alerted = false;
+  focusSession.driftStartedAt = null;
+  focusSession.driftAppName = null;
+  focusSession.snoozedUntil = 0;
   focusSession.lastFocusBundleId = focusApps[0]?.bundleId || null;
-  if (focusSession.timer) clearInterval(focusSession.timer);
-  focusSession.timer = setInterval(pollFocus, POLL_INTERVAL_MS);
+
+  logFocusEvent('session_start', { focusApps });
+
+  if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
+  focusSession.pollTimer = setInterval(pollFocus, POLL_INTERVAL_MS);
+
   console.log('[electron] 집중 세션 시작 — 집중 앱:', focusApps.map((a) => a.name).join(', '));
+  refreshTray();
 }
 
 function stopFocusSession() {
-  focusSession.active = false;
-  if (focusSession.timer) clearInterval(focusSession.timer);
-  focusSession.timer = null;
+  if (focusSession.status === 'idle') return;
+
+  logFocusEvent('session_end', {});
+
+  focusSession.status = 'idle';
+  focusSession.id = null;
+  focusSession.driftStartedAt = null;
+  focusSession.driftAppName = null;
+
+  if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
+  focusSession.pollTimer = null;
+  if (focusSession.breakTimer) clearTimeout(focusSession.breakTimer);
+  focusSession.breakTimer = null;
+  focusSession.breakEndsAt = null;
+
+  if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
+
+  console.log('[electron] 집중 세션 종료');
+  refreshTray();
 }
+
+function startBreak(minutes) {
+  if (focusSession.status !== 'focusing') return;
+
+  focusSession.status = 'onBreak';
+  focusSession.driftStartedAt = null;
+  focusSession.driftAppName = null;
+  if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
+
+  const ms = Math.max(1, minutes) * 60000;
+  focusSession.breakEndsAt = Date.now() + ms;
+  logFocusEvent('break_start', { minutes });
+
+  if (focusSession.breakTimer) clearTimeout(focusSession.breakTimer);
+  focusSession.breakTimer = setTimeout(() => endBreak('auto'), ms);
+
+  console.log(`[electron] 휴식 시작 — ${minutes}분`);
+  refreshTray();
+}
+
+function endBreak(reason) {
+  if (focusSession.status !== 'onBreak') return;
+
+  if (focusSession.breakTimer) clearTimeout(focusSession.breakTimer);
+  focusSession.breakTimer = null;
+  focusSession.breakEndsAt = null;
+  focusSession.status = 'focusing';
+
+  logFocusEvent('break_end', { reason });
+
+  console.log(`[electron] 휴식 종료 (${reason})`);
+  refreshTray();
+}
+
+// ---- 트레이 메뉴 ----
+// "집중 시작"을 앱 켜지자마자 자동으로 띄우는 대신, 메뉴바 트레이 아이콘에서
+// 사용자가 직접 눌러서 열도록 한다. 같은 메뉴에서 휴식하기/집중 재개/
+// 집중 멈추기까지 전부 제어한다.
+function breakRemainingLabel() {
+  if (!focusSession.breakEndsAt) return '';
+  const remainingMin = Math.max(0, Math.ceil((focusSession.breakEndsAt - Date.now()) / 60000));
+  return ` (약 ${remainingMin}분 남음)`;
+}
+
+function buildTrayMenu() {
+  const statusLabel = focusSession.status === 'focusing'
+    ? '● 집중 중'
+    : focusSession.status === 'onBreak'
+      ? `● 휴식 중${breakRemainingLabel()}`
+      : '대기 중';
+
+  return Menu.buildFromTemplate([
+    { label: statusLabel, enabled: false },
+    { type: 'separator' },
+    { label: '집중 시작...', enabled: focusSession.status === 'idle', click: openFocusSetup },
+    { label: '휴식하기...', enabled: focusSession.status === 'focusing', click: openBreakPicker },
+    { label: '집중 재개', enabled: focusSession.status === 'onBreak', click: () => endBreak('manual') },
+    { label: '집중 멈추기', enabled: focusSession.status !== 'idle', click: stopFocusSession },
+    { type: 'separator' },
+    {
+      label: 'Zonemate 열기',
+      click: () => {
+        if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+        else mainWindow.show();
+      },
+    },
+    { type: 'separator' },
+    { label: '종료', click: () => app.quit() },
+  ]);
+}
+
+function refreshTray() {
+  if (tray) tray.setContextMenu(buildTrayMenu());
+}
+
+function createTray() {
+  tray = new Tray(path.join(__dirname, 'tray-icon.png'));
+  tray.setToolTip('Zonemate');
+  refreshTray();
+}
+
+// 플로팅 알림 창의 버튼에서 올라온 사용자 선택을 처리한다.
+ipcMain.on('alert-action', (event, action) => {
+  console.log('[electron] 알림 액션 선택됨:', JSON.stringify(action));
+  logFocusEvent('alert_action', action);
+
+  if (action.actionId === 'return' && focusSession.lastFocusBundleId) {
+    // 이탈 직전에 집중하고 있던 앱으로 되돌린다.
+    activateApp(focusSession.lastFocusBundleId);
+  } else if (action.actionId === 'ignore') {
+    // 5분간 재알림하지 않는다(이탈 자체는 계속 추적 — 무시했다고 해서
+    // 실제로 벗어나 있던 시간 기록이 사라지면 안 되니까).
+    focusSession.snoozedUntil = Date.now() + SNOOZE_MS;
+  }
+
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) win.close();
+});
 
 ipcMain.handle('get-open-apps', async () => {
   try {
@@ -296,7 +472,17 @@ ipcMain.on('cancel-focus-setup', () => {
   if (focusSetupWindow && !focusSetupWindow.isDestroyed()) focusSetupWindow.close();
 });
 
+ipcMain.on('start-break', (event, minutes) => {
+  startBreak(minutes);
+  if (breakPickerWindow && !breakPickerWindow.isDestroyed()) breakPickerWindow.close();
+});
+
+ipcMain.on('cancel-break-picker', () => {
+  if (breakPickerWindow && !breakPickerWindow.isDestroyed()) breakPickerWindow.close();
+});
+
 app.whenReady().then(async () => {
+  createTray();
   startBackend();
   startFrontend();
 
@@ -312,20 +498,15 @@ app.whenReady().then(async () => {
 
   createWindow();
 
-  // 테스트 편의: 앱이 뜨면 바로 집중 설정 창을 연다. 실제 서비스에서는
-  // 메인 UI의 "집중하기" 버튼이 openFocusSetup()을 호출하는 형태가 된다.
-  setTimeout(openFocusSetup, 1500);
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  stopFocusSession();
-  if (backendProcess) backendProcess.kill();
-  if (frontendProcess) frontendProcess.kill();
-  if (process.platform !== 'darwin') app.quit();
+  // 트레이 상주 앱이라 메인 창을 닫아도 백그라운드(트레이)는 계속 살아있게
+  // 한다 — 집중 세션/알림이 메인 창 없이도 계속 동작해야 하므로 macOS 여부와
+  // 관계없이 앱을 종료하지 않는다. 완전 종료는 트레이 메뉴의 "종료"로만.
 });
 
 app.on('before-quit', () => {
