@@ -1,9 +1,9 @@
 import 'dotenv/config';
+import path from 'node:path';
+import fs from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import path from 'node:path';
-import fs from 'node:fs';
 import planRouter from './routes/plan.js';
 import deadlineTasksRouter from './routes/deadlineTasks.js';
 import authRouter from './routes/auth.js';
@@ -29,13 +29,16 @@ app.use('/api/daily-archives', dailyArchiveRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/focus-events', focusEventsRouter);
 
-if (process.env.FRONTEND_DIST_DIR) {
-  const frontendDistDir = process.env.FRONTEND_DIST_DIR;
+// 패키징된 앱에서는 백엔드가 프론트엔드 정적 빌드도 같은 오리진에서 서빙한다.
+// 개발 중에는 Vite dev 서버(:5173)를 쓰므로 FRONTEND_DIST_DIR이 없어 건너뛴다.
+const frontendDistDir = process.env.FRONTEND_DIST_DIR;
+if (frontendDistDir) {
   const indexHtmlPath = path.join(frontendDistDir, 'index.html');
-
   if (fs.existsSync(indexHtmlPath)) {
     app.use(express.static(frontendDistDir));
-    app.get('*', (req, res) => {
+    // SPA 폴백: /api가 아닌 GET 요청은 전부 index.html로 넘겨 클라이언트 라우팅에 맡긴다.
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
       res.sendFile(indexHtmlPath);
     });
   } else {

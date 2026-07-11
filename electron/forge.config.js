@@ -1,9 +1,12 @@
 const path = require('node:path');
+const os = require('node:os');
 
 // Squirrel의 rcedit.exe는 한글이 포함된 경로에서 Setup.exe를 열지 못한다.
-// 항상 ASCII인 Windows Public 경로에서 만든 뒤 release/로 복사한다.
+// 항상 ASCII인 임시 경로(Windows=Public, mac/linux=os.tmpdir())에서 만든 뒤
+// release/로 복사한다. (프로젝트 경로에 '몰입캠프' 한글이 있어 mac에서도 임시
+// 경로를 쓰는 게 안전하고 repo도 깨끗하게 유지된다.)
 const forgeOutDirectory = path.join(
-  process.env.PUBLIC || process.env.TEMP || __dirname,
+  process.env.PUBLIC || process.env.TEMP || os.tmpdir(),
   'ZonemateBuild',
 );
 
@@ -18,6 +21,7 @@ module.exports = {
     asar: true,
     name: 'Zonemate',
     executableName: 'Zonemate',
+    appBundleId: 'io.zonemate.desktop',
     // 확장자 없이 지정 — 패키저가 플랫폼별로 .icns(mac)/.ico(win)를 붙인다.
     icon: path.join(__dirname, 'icon'),
     extraResource: [
@@ -31,10 +35,26 @@ module.exports = {
   },
   makers: [
     {
+      // Windows 설치본(자동 업데이트 지원: Squirrel.Windows). 서명 없이도 동작.
       name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
       config: {
         name: 'zonemate',
         setupExe: 'Zonemate-Setup.exe',
+      },
+    },
+    {
+      // macOS zip — Squirrel.Mac 자동 업데이트가 소비하는 포맷이자, 서명 없이도
+      // 만들 수 있는 가장 안전한 배포물.
+      name: '@electron-forge/maker-zip',
+      platforms: ['darwin'],
+    },
+    {
+      // macOS .dmg — 더 보기 좋은 다운로드용 설치 이미지.
+      name: '@electron-forge/maker-dmg',
+      platforms: ['darwin'],
+      config: {
+        name: 'Zonemate',
       },
     },
   ],

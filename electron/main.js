@@ -13,6 +13,21 @@ try {
   // 미설치(개발/비Windows) — 무시
 }
 
+// 자동 업데이트: 설치된 앱이 재설치 없이 GitHub Releases의 새 버전을 받아
+// 스스로 갱신한다(update.electronjs.org 경유, public 저장소 필요).
+// - Windows(Squirrel): 서명 없이도 동작.
+// - macOS(Squirrel.Mac): 앱이 Apple Developer ID로 코드서명+노터라이즈된
+//   경우에만 동작(미서명이면 update-electron-app이 조용히 건너뛴다).
+// 개발 모드나 미서명 mac에서는 no-op이므로 여기서 호출해도 안전하다.
+if (app.isPackaged) {
+  try {
+    const { updateElectronApp } = require('update-electron-app');
+    updateElectronApp({ updateInterval: '6 hours' });
+  } catch (err) {
+    console.error('[electron] 자동 업데이트 초기화 실패:', err.message);
+  }
+}
+
 // get-windows는 ESM 전용이라 CommonJS인 여기서는 동적 import()로 한 번만
 // 불러와서 재사용한다.
 let getWindowsModulePromise = null;
