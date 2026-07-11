@@ -554,3 +554,27 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
   border: 1px dashed var(--signal-dim); border-radius: var(--radius-md);
 }
 .dev-code-notice b { color: var(--signal); letter-spacing: .08em; }
+
+/* ==== 간단한 등장 애니메이션 ==== */
+@keyframes zm-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes zm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes zm-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes zm-bubble { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.panel { animation: zm-fade-up .32s ease both; }
+.auth-card { animation: zm-fade-up .3s ease both; }
+.chat-bubble { animation: zm-bubble .22s ease both; }
+.date-editor, .timetable, .day-wheel { animation: zm-fade-up .26s ease both; }
+.focus-modal-backdrop { animation: zm-fade .18s ease both; }
+.focus-modal { animation: zm-pop .22s ease both; }
+.focus-mode { animation: zm-fade .28s ease both; }
+.focus-stat { animation: zm-fade-up .3s ease both; }
+
+/* 접근성: 사용자가 모션 최소화를 켜두면 애니메이션을 끈다 */
+@media (prefers-reduced-motion: reduce) {
+  .panel, .auth-card, .chat-bubble, .date-editor, .timetable, .day-wheel,
+  .focus-modal-backdrop, .focus-modal, .focus-mode, .focus-stat {
+    animation: none;
+  }
+  * { transition: none !important; }
+}
