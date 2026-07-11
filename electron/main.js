@@ -168,7 +168,7 @@ function logFocusEvent(type, meta) {
   if (!focusSession.id) return;
   const payload = JSON.stringify({ sessionId: focusSession.id, clientId: 'zonemate-desktop', type, meta });
   const req = http.request(
-    FOCUS_EVENTS_URL,
+    `${BACKEND_ORIGIN}/api/focus-events`,
     { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } },
     (res) => res.resume(),
   );
