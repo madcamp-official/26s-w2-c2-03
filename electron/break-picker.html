@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        --ground: #f5f1e8;
+        --surface: #ffffff;
+        --surface-2: #ede6d6;
+        --line: #dcd2bc;
+        --signal: #b5660f;
+        --signal-ink: #ffffff;
+        --noise: #5b6472;
+        --text-1: #241d14;
+        --text-2: #6b5d46;
+        --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace;
+        --radius: 3px;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; }
+      body {
+        font-family: var(--font-sans);
+        color: var(--text-1);
+        background: var(--ground);
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+      }
+      .kicker {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--noise);
+        margin-bottom: 6px;
+      }
+      h1 { font-size: 16px; font-weight: 650; }
+      .sub { font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.5; }
+      .presets {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin: 18px 0 8px;
+      }
+      .preset {
+        padding: 14px 0;
+        text-align: center;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 14px;
+      }
+      .preset:hover { border-color: var(--noise); }
+      .preset.is-selected { border-color: var(--signal); color: var(--signal); background: var(--surface); }
+      .custom-row { display: flex; align-items: center; gap: 8px; margin-bottom: auto; }
+      .custom-row input {
+        width: 70px;
+        font-family: var(--font-mono);
+        font-size: 14px;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+      .custom-row span { font-size: 13px; color: var(--text-2); }
+      .footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+      button {
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        letter-spacing: 0.02em;
+        padding: 9px 16px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--text-2);
+      }
+      button:hover { border-color: var(--noise); color: var(--text-1); }
+      button.primary { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+      button.primary:hover { filter: brightness(1.07); }
+    </style>
+  </head>
+  <body>
+    <div class="kicker">휴식하기</div>
+    <h1>얼마나 쉴까요?</h1>
+    <p class="sub">고른 시간이 지나면 자동으로 집중 모드로 돌아와요.</p>
+
+    <div class="presets" id="presets">
+      <div class="preset" data-minutes="5">5분</div>
+      <div class="preset" data-minutes="10">10분</div>
+      <div class="preset" data-minutes="15">15분</div>
+      <div class="preset" data-minutes="30">30분</div>
+      <div class="preset" data-minutes="60">1시간</div>
+    </div>
+
+    <div class="custom-row">
+      <span>직접 입력:</span>
+      <input type="number" id="customMinutes" min="1" max="240" placeholder="분" />
+      <span>분</span>
+    </div>
+
+    <div class="footer">
+      <button id="cancelBtn">취소</button>
+      <button class="primary" id="startBtn">휴식 시작</button>
+    </div>
+
+    <script>
+      const presetsEl = document.getElementById('presets');
+      const customInput = document.getElementById('customMinutes');
+      const startBtn = document.getElementById('startBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      let selectedMinutes = 5;
+
+      function selectPreset(el) {
+        [...presetsEl.children].forEach((c) => c.classList.remove('is-selected'));
+        el.classList.add('is-selected');
+        selectedMinutes = Number(el.dataset.minutes);
+        customInput.value = '';
+      }
+
+      presetsEl.addEventListener('click', (e) => {
+        const el = e.target.closest('.preset');
+        if (el) selectPreset(el);
+      });
+      selectPreset(presetsEl.children[0]);
+
+      customInput.addEventListener('input', () => {
+        const val = Number(customInput.value);
+        if (val > 0) {
+          [...presetsEl.children].forEach((c) => c.classList.remove('is-selected'));
+          selectedMinutes = val;
+        }
+      });
+
+      startBtn.addEventListener('click', () => {
+        window.breakPicker.start(selectedMinutes);
+      });
+      cancelBtn.addEventListener('click', () => window.breakPicker.cancel());
+    </script>
+  </body>
+</html>
