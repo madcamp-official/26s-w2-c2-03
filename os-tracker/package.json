@@ -5,7 +5,8 @@
   "main": "tracker.js",
   "scripts": {
     "start": "node tracker.js",
-    "check": "node --check tracker.js"
+    "check": "node --check tracker.js && node --check diagnose-windows.js",
+    "diagnose:windows": "node diagnose-windows.js"
   },
   "keywords": [],
   "author": "",

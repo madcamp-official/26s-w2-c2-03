@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test:focus": "node src/services/focusEngine.synthetic-test.js && node src/services/focusMetricsAdapter.synthetic-test.js"
   },
   "dependencies": {
     "@google/genai": "^0.14.0",

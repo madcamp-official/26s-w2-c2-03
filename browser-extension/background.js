@@ -43,6 +43,7 @@ function enqueueEvent(event) {
 
 async function reportActiveTab(reason) {
   try {
+    const { clientId = 'local-device' } = await chrome.storage.local.get('clientId');
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     if (!tab || tab.incognito || !tab.url) return;
 
@@ -52,6 +53,7 @@ async function reportActiveTab(reason) {
 
     enqueueEvent({
       type: 'browser_tab',
+      clientId,
       title: tab.title || null,
       url: tab.url,
       tabId: tab.id,

@@ -8,6 +8,7 @@ const axios = require('axios');
 // 🌟 중요: 아까 backend 서버 포트인 4000번으로 주소를 정확히 맞춰줍니다.
 const BACKEND_URL = 'http://localhost:4000/api/metrics';
 const ACTIVE_WINDOW_POLL_MS = 2000;
+const CLIENT_ID = process.env.METRICS_CLIENT_ID || 'local-device';
 
 // 사용자의 입력을 임시로 담아둘 바구니(버퍼)
 let dataBuffer = [];
@@ -118,7 +119,7 @@ setInterval(async () => {
   console.log(`[배달부] 현재 쌓인 데이터 ${dataBuffer.length}개를 서버로 발송합니다...`);
 
   // 발송하는 도중에 새로운 이벤트가 들어오면 꼬이므로 기존 바구니 복사 후 비우기
-  const packetToSend = [...dataBuffer];
+  const packetToSend = dataBuffer.map((event) => ({ clientId: CLIENT_ID, ...event }));
   dataBuffer = [];
 
   try {

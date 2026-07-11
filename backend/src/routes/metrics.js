@@ -1,6 +1,12 @@
 import express from 'express';
+import { createFocusMetricsAdapter } from '../services/focusMetricsAdapter.js';
 
 const router = express.Router();
+const focusAdapter = createFocusMetricsAdapter();
+
+router.get('/focus-state', (req, res) => {
+  res.json({ sessions: focusAdapter.getStates() });
+});
 
 /**
  * [POST] /api/metrics
@@ -33,10 +39,16 @@ router.post('/', (req, res) => {
     }
   });
 
+  const focusSessions = focusAdapter.ingest(incomingLogs);
+
   // TODO: 이후 DB 저장 로직이 필요하다면 여기에 작성
   // 예: await db.insert(incomingLogs);
 
-  return res.status(200).json({ status: 'success', message: '로그 저장 완료' });
+  return res.status(200).json({
+    status: 'success',
+    message: '로그 처리 완료',
+    focusSessions,
+  });
 });
 
 export default router;
