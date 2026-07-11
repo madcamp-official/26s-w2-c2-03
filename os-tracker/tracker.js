@@ -3,9 +3,11 @@ const axios = require('axios');
 
 // 🌟 중요: 아까 backend 서버 포트인 4000번으로 주소를 정확히 맞춰줍니다.
 const BACKEND_URL = 'http://localhost:4000/api/metrics';
+const ACTIVE_WINDOW_POLL_MS = 2000;
 
 // 사용자의 입력을 임시로 담아둘 바구니(버퍼)
 let dataBuffer = [];
+let lastWindowSignature = null;
 
 console.log("=========================================");
 console.log("       OS 입력 수집 에이전트 가동        ");
@@ -36,7 +38,59 @@ uIOhook.on('keydown', (e) => {
   });
 });
 
-// 3. 주기적 발송 모터 달기 (5초마다 백엔드로 수집된 데이터 발송)
+// 3. 현재 활성 창 수집
+// get-windows는 ESM 전용 패키지라 CommonJS 파일에서는 동적 import()로 불러온다.
+// 매번 같은 창을 저장하지 않고 앱/제목/PID/창 ID가 바뀐 순간만 이벤트를 만든다.
+async function startActiveWindowTracking() {
+  try {
+    const { activeWindow } = await import('get-windows');
+
+    async function pollActiveWindow() {
+      try {
+        const windowInfo = await activeWindow({
+          // 브라우저 URL은 확장에서 수집하므로 macOS 접근성 권한을 URL 용도로
+          // 중복 요청하지 않는다. 창 제목에는 화면 기록 권한이 필요할 수 있다.
+          accessibilityPermission: false,
+        });
+
+        if (windowInfo) {
+          const signature = JSON.stringify([
+            windowInfo.owner?.name,
+            windowInfo.title,
+            windowInfo.owner?.processId,
+            windowInfo.id,
+          ]);
+
+          if (signature !== lastWindowSignature) {
+            lastWindowSignature = signature;
+            dataBuffer.push({
+              type: 'active_window',
+              platform: windowInfo.platform || process.platform,
+              appName: windowInfo.owner?.name || null,
+              windowTitle: windowInfo.title || null,
+              processId: windowInfo.owner?.processId || null,
+              processPath: windowInfo.owner?.path || null,
+              bundleId: windowInfo.owner?.bundleId || null,
+              windowId: windowInfo.id ?? null,
+              memoryUsage: windowInfo.memoryUsage ?? null,
+              time: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (err) {
+        console.error('활성 창 정보를 읽지 못했어요:', err.message || err);
+      } finally {
+        setTimeout(pollActiveWindow, ACTIVE_WINDOW_POLL_MS);
+      }
+    }
+
+    await pollActiveWindow();
+  } catch (err) {
+    console.error('get-windows를 불러오지 못했어요. npm install을 확인해주세요:', err.message || err);
+  }
+}
+
+// 4. 주기적 발송 모터 달기 (5초마다 백엔드로 수집된 데이터 발송)
 setInterval(async () => {
   // 바구니가 비어있으면 서버를 귀찮게 하지 않고 패스합니다.
   if (dataBuffer.length === 0) return;
@@ -60,7 +114,7 @@ setInterval(async () => {
   }
 }, 5000); // 5000ms = 5초 주기
 
-// 4. 플랫폼별 안내 문구 — Windows 안내를 Mac에서 그대로 띄우면(반대도 마찬가지)
+// 5. 플랫폼별 안내 문구 — Windows 안내를 Mac에서 그대로 띄우면(반대도 마찬가지)
 // 실제 원인과 무관한 조치를 안내하게 되므로 실행 중인 OS에 맞는 안내만 띄운다.
 function printPlatformGuidance() {
   if (process.platform === 'win32') {
@@ -71,7 +125,7 @@ function printPlatformGuidance() {
   }
 }
 
-// 5. 수집기 실행 — macOS는 접근성 권한이 꺼져 있으면 start()가 예외를 던지며
+// 6. 수집기 실행 — macOS는 접근성 권한이 꺼져 있으면 start()가 예외를 던지며
 // 즉시 크래시한다. try/catch 없이 두면 알아보기 힘든 네이티브 에러 스택만
 // 남고 왜 안 되는지 안내가 없어서, 원인을 구분해 안내 메시지를 보여주고
 // 깔끔하게 종료하도록 한다.
@@ -88,6 +142,7 @@ try {
 }
 
 console.log("\n실시간 백그라운드 수집기가 작동 중입니다.");
+void startActiveWindowTracking();
 printPlatformGuidance();
 console.log("-----------------------------------------");
 

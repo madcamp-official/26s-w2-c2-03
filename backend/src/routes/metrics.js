@@ -21,6 +21,15 @@ router.post('/', (req, res) => {
       console.log(`   - [마우스] 버튼: ${log.button}, 좌표: (${log.x}, ${log.y}), 시각: ${log.time}`);
     } else if (log.type === 'keydown') {
       console.log(`   - [키보드] KeyCode: ${log.keycode}, 시각: ${log.time}`);
+    } else if (log.type === 'active_window') {
+      console.log(
+        `   - [활성 창] ${log.appName || '알 수 없는 앱'} | ${log.windowTitle || '제목 없음'} `
+        + `| PID: ${log.processId ?? '-'} | ${log.time}`
+      );
+    } else if (log.type === 'browser_tab') {
+      console.log(
+        `   - [브라우저 탭] ${log.title || '제목 없음'} | ${log.url || 'URL 없음'} | ${log.time}`
+      );
     }
   });
 
