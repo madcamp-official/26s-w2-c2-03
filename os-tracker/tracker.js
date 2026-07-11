@@ -48,6 +48,13 @@ uIOhook.on('keydown', (e) => {
 async function startActiveWindowTracking() {
   try {
     const { activeWindow } = await import('get-windows');
+    // get-windows가 실패한 이유(권한 안내 등)는 err.message가 아니라
+    // err.stdout에 사람이 읽을 수 있는 문장으로 들어있다. err.message만 찍으면
+    // "Command failed: ..." 같은 의미 없는 줄만 2초마다 반복 출력돼서, 실제
+    // 원인(예: 화면 기록 권한 없음)을 완전히 놓치게 된다 — 직접 재현해서 확인함:
+    // get-windows는 Accessibility/Input Monitoring과는 또 별개로 macOS
+    // "화면 기록(Screen Recording)" 권한이 없으면 창 제목을 못 읽는다.
+    let lastActiveWindowErrorReason = null;
 
     async function pollActiveWindow() {
       try {
@@ -58,6 +65,7 @@ async function startActiveWindowTracking() {
         });
 
         if (windowInfo) {
+          lastActiveWindowErrorReason = null; // 복구되면 다음 실패 시 다시 안내하도록 리셋
           const signature = JSON.stringify([
             windowInfo.owner?.name,
             windowInfo.title,
@@ -82,7 +90,15 @@ async function startActiveWindowTracking() {
           }
         }
       } catch (err) {
-        console.error('활성 창 정보를 읽지 못했어요:', err.message || err);
+        const reason = (err.stdout && err.stdout.trim()) || err.message || String(err);
+        // 같은 이유로 계속 실패하는 동안은 2초마다 반복 출력하지 않고 한 번만 알린다.
+        if (reason !== lastActiveWindowErrorReason) {
+          lastActiveWindowErrorReason = reason;
+          console.error('\n❌ 활성 창 정보를 읽지 못했어요:', reason);
+          if (process.platform === 'darwin' && /screen recording/i.test(reason)) {
+            console.error('   시스템 설정 → 개인정보 보호 및 보안 → 화면 기록에서 이 터미널(또는 실행 앱)에 권한을 켜준 뒤 다시 실행해주세요.\n');
+          }
+        }
       } finally {
         setTimeout(pollActiveWindow, ACTIVE_WINDOW_POLL_MS);
       }
