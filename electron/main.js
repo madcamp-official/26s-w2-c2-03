@@ -110,8 +110,20 @@ function createWindow() {
     width: 1280,
     height: 840,
     title: 'Zonemate',
+    webPreferences: {
+      // React 앱(웹)에 집중 세션 제어/실시간 상태 브리지를 노출한다.
+      preload: path.join(__dirname, 'main-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
   mainWindow.loadURL(FRONTEND_URL);
+  // 창이 준비되면 현재 상태를 즉시 한 번 보내 초기 화면을 맞춘다.
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('focus-state', buildFocusSnapshot());
+    }
+  });
 
   if (SMOKE_TEST) {
     mainWindow.webContents.once('did-finish-load', async () => {
@@ -266,6 +278,10 @@ function activateFocusApps() {
 const DRIFT_ALERT_MS = 6 * 1000;
 const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
+const BROADCAST_INTERVAL_MS = 1000;
+// 집중력 게이지(EMA) 평활 계수. 폴링 tick(2초)마다 갱신되며, 집중이면 +1,
+// 이탈이면 -1, 그 외(자기 창/자리비움)는 현 상태 유지 쪽으로 살짝 당긴다.
+const GAUGE_ALPHA = 0.15;
 // 순수 시스템/배경 항목은 선택 목록에서 감춘다(앱 선택 UX를 깔끔하게).
 const SYSTEM_BUNDLE_IDS = new Set([
   'com.apple.WindowManager',
@@ -284,6 +300,7 @@ const focusSession = {
   focusApps: [],
   focusAppIds: new Set(),
   pollTimer: null,
+  broadcastTimer: null,
   driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
   driftAppName: null,
   snoozedUntil: 0, // 이 시각까지는 재알림하지 않음
@@ -292,6 +309,19 @@ const focusSession = {
   lastFocusApp: null, // 마지막으로 집중 앱에 있었던 순간의 appInfo
   breakTimer: null,
   breakEndsAt: null,
+  breakStartedAt: null,
+
+  // ---- 대시보드용 실시간 통계 ----
+  sessionStartedAt: null, // 세션(집중 시작) 시각
+  focusStreakStartedAt: null, // 지금 이어지는 집중이 시작된 시각(이탈/휴식하면 리셋)
+  currentState: 'idle', // 'focus' | 'drift' | 'break' | 'self' | 'idle' — 통계 집계용 순간 상태
+  accountedAt: null, // 마지막으로 누적 통계에 반영한 시각
+  totalFocusMs: 0, // 세션 누적 집중 시간
+  totalDriftMs: 0, // 세션 누적 이탈(딴짓) 시간
+  totalBreakMs: 0, // 세션 누적 휴식 시간
+  lastReturnMs: null, // 가장 최근 이탈에서 돌아오기까지 걸린 시간
+  driftCount: 0, // 세션 중 이탈한 횟수
+  gauge: 100, // 집중력 게이지(0~100)
 };
 
 // 활성/열린 창 정보에서 플랫폼에 상관없이 앱을 식별할 키를 뽑아낸다.
@@ -323,6 +353,80 @@ async function getOpenAppList() {
     if (!seen.has(appInfo.appId)) seen.set(appInfo.appId, appInfo);
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+// ---- 실시간 통계 집계 ----
+// 지금까지 흐른 시간을 currentState에 해당하는 버킷에 누적한다. 상태를 바꾸기
+// 직전과 스냅샷을 만들기 직전에 호출해서, 진행 중인 구간까지 반영된 최신
+// 통계가 나오게 한다.
+function accrueStats(now = Date.now()) {
+  if (focusSession.accountedAt == null) {
+    focusSession.accountedAt = now;
+    return;
+  }
+  const delta = now - focusSession.accountedAt;
+  focusSession.accountedAt = now;
+  if (delta <= 0) return;
+
+  if (focusSession.currentState === 'focus') focusSession.totalFocusMs += delta;
+  else if (focusSession.currentState === 'drift') focusSession.totalDriftMs += delta;
+  else if (focusSession.currentState === 'break') focusSession.totalBreakMs += delta;
+  // 'self'(Zonemate 자기 창)/'idle'은 어느 버킷에도 넣지 않는다.
+}
+
+// 순간 상태를 바꾼다. 바꾸기 전에 이전 상태 시간을 정산하고, 집중력 게이지도
+// 함께 갱신한다.
+function setCurrentState(state, now = Date.now()) {
+  accrueStats(now);
+  focusSession.currentState = state;
+  // 게이지: 집중이면 위로, 이탈이면 아래로 당긴다. 그 외 상태는 유지.
+  let target = null;
+  if (state === 'focus') target = 100;
+  else if (state === 'drift') target = 0;
+  if (target != null) {
+    focusSession.gauge = GAUGE_ALPHA * target + (1 - GAUGE_ALPHA) * focusSession.gauge;
+  }
+}
+
+// React에 보낼 현재 상태 스냅샷. 진행 중인 구간까지 반영하려고 먼저 정산한다.
+function buildFocusSnapshot() {
+  const now = Date.now();
+  if (focusSession.status !== 'idle') accrueStats(now);
+
+  return {
+    status: focusSession.status, // 'idle' | 'focusing' | 'onBreak'
+    isDrifting: focusSession.status === 'focusing' && focusSession.driftStartedAt != null,
+    focusApps: focusSession.focusApps.map((a) => ({ appId: a.appId, name: a.name })),
+    driftAppName: focusSession.driftAppName,
+    now,
+    sessionStartedAt: focusSession.sessionStartedAt,
+    focusStreakStartedAt: focusSession.focusStreakStartedAt,
+    driftStartedAt: focusSession.driftStartedAt,
+    breakStartedAt: focusSession.breakStartedAt,
+    breakEndsAt: focusSession.breakEndsAt,
+    totalFocusMs: focusSession.totalFocusMs,
+    totalDriftMs: focusSession.totalDriftMs,
+    totalBreakMs: focusSession.totalBreakMs,
+    lastReturnMs: focusSession.lastReturnMs,
+    driftCount: focusSession.driftCount,
+    gauge: Math.round(focusSession.gauge),
+  };
+}
+
+function broadcastFocusState() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('focus-state', buildFocusSnapshot());
+  }
+}
+
+function startBroadcasting() {
+  if (focusSession.broadcastTimer) clearInterval(focusSession.broadcastTimer);
+  focusSession.broadcastTimer = setInterval(broadcastFocusState, BROADCAST_INTERVAL_MS);
+}
+
+function stopBroadcasting() {
+  if (focusSession.broadcastTimer) clearInterval(focusSession.broadcastTimer);
+  focusSession.broadcastTimer = null;
 }
 
 function openFocusSetup() {
@@ -380,7 +484,10 @@ async function pollFocus() {
     // 개발/배포 환경에 상관없이 동작하게 한다.
     const isSelfFocused = BrowserWindow.getAllWindows()
       .some((w) => !w.isDestroyed() && w.isFocused());
-    if (isSelfFocused) return;
+    if (isSelfFocused) {
+      setCurrentState('self');
+      return;
+    }
 
     const { activeWindow } = await loadGetWindows();
     const info = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
@@ -393,6 +500,7 @@ async function pollFocus() {
         // 무시하기를 누른 이탈에서 돌아온 경우엔 자동으로 이탈 종료 처리하지
         // 않는다 — "재개하기"를 눌러 명시적으로 확인해야 실제로 집중을
         // 재개한 것으로 본다. 확인 전까지는 이탈 상태(및 통계)를 그대로 유지.
+        setCurrentState('drift');
         if (!alertWindow) {
           focusSession.pendingReturnApp = activeApp;
           const driftMs = focusSession.driftStartedAt ? now - focusSession.driftStartedAt : 0;
@@ -408,9 +516,16 @@ async function pollFocus() {
         return;
       }
 
+      // 이탈에서 집중으로 복귀 — 돌아오기까지 걸린 시간을 기록하고 새 집중
+      // streak을 시작한다.
       if (focusSession.driftStartedAt) {
-        logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt });
+        focusSession.lastReturnMs = now - focusSession.driftStartedAt;
+        logFocusEvent('drift_end', { durationMs: focusSession.lastReturnMs });
       }
+      if (focusSession.currentState !== 'focus') {
+        focusSession.focusStreakStartedAt = now;
+      }
+      setCurrentState('focus');
       focusSession.lastFocusApp = activeApp;
       focusSession.driftStartedAt = null;
       focusSession.driftAppName = null;
@@ -418,9 +533,11 @@ async function pollFocus() {
       return;
     }
 
+    setCurrentState('drift');
     if (!focusSession.driftStartedAt) {
       focusSession.driftStartedAt = now;
       focusSession.driftAppName = info?.owner?.name || '다른 창';
+      focusSession.driftCount += 1;
       logFocusEvent('drift_start', { toApp: focusSession.driftAppName });
     }
 
@@ -445,6 +562,7 @@ async function pollFocus() {
 }
 
 function startFocusSession(focusApps) {
+  const now = Date.now();
   focusSession.id = randomUUID();
   focusSession.status = 'focusing';
   focusSession.focusApps = focusApps;
@@ -456,26 +574,49 @@ function startFocusSession(focusApps) {
   focusSession.pendingReturnApp = null;
   focusSession.lastFocusApp = focusApps[0] || null;
 
+  // 통계 초기화 — 새 세션 시작이므로 게이지도 만점에서 출발한다.
+  focusSession.sessionStartedAt = now;
+  focusSession.focusStreakStartedAt = now;
+  focusSession.currentState = 'focus';
+  focusSession.accountedAt = now;
+  focusSession.totalFocusMs = 0;
+  focusSession.totalDriftMs = 0;
+  focusSession.totalBreakMs = 0;
+  focusSession.lastReturnMs = null;
+  focusSession.driftCount = 0;
+  focusSession.gauge = 100;
+
   logFocusEvent('session_start', { focusApps });
 
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = setInterval(pollFocus, POLL_INTERVAL_MS);
+  startBroadcasting();
 
   console.log('[electron] 집중 세션 시작 — 집중 앱:', focusApps.map((a) => a.name).join(', '));
   refreshTray();
+  broadcastFocusState();
 }
 
 function stopFocusSession() {
   if (focusSession.status === 'idle') return;
 
-  logFocusEvent('session_end', {});
+  accrueStats();
+  logFocusEvent('session_end', {
+    totalFocusMs: focusSession.totalFocusMs,
+    totalDriftMs: focusSession.totalDriftMs,
+    totalBreakMs: focusSession.totalBreakMs,
+    driftCount: focusSession.driftCount,
+  });
 
   focusSession.status = 'idle';
   focusSession.id = null;
+  focusSession.currentState = 'idle';
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.ignoredCurrentDrift = false;
   focusSession.pendingReturnApp = null;
+  focusSession.focusStreakStartedAt = null;
+  focusSession.breakStartedAt = null;
 
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = null;
@@ -487,20 +628,26 @@ function stopFocusSession() {
 
   console.log('[electron] 집중 세션 종료');
   refreshTray();
+  broadcastFocusState();
+  stopBroadcasting();
 }
 
 function startBreak(minutes) {
   if (focusSession.status !== 'focusing') return;
 
+  const now = Date.now();
+  setCurrentState('break', now); // 이전 상태 정산 후 휴식 집계 시작
   focusSession.status = 'onBreak';
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.ignoredCurrentDrift = false;
   focusSession.pendingReturnApp = null;
+  focusSession.focusStreakStartedAt = null;
   if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
 
   const ms = Math.max(1, minutes) * 60000;
-  focusSession.breakEndsAt = Date.now() + ms;
+  focusSession.breakStartedAt = now;
+  focusSession.breakEndsAt = now + ms;
   logFocusEvent('break_start', { minutes });
 
   if (focusSession.breakTimer) clearTimeout(focusSession.breakTimer);
@@ -508,20 +655,27 @@ function startBreak(minutes) {
 
   console.log(`[electron] 휴식 시작 — ${minutes}분`);
   refreshTray();
+  broadcastFocusState();
 }
 
 function endBreak(reason) {
   if (focusSession.status !== 'onBreak') return;
 
+  const now = Date.now();
   if (focusSession.breakTimer) clearTimeout(focusSession.breakTimer);
   focusSession.breakTimer = null;
   focusSession.breakEndsAt = null;
+  focusSession.breakStartedAt = null;
   focusSession.status = 'focusing';
+  // 휴식 종료 = 새 집중 streak 시작.
+  focusSession.focusStreakStartedAt = now;
+  setCurrentState('focus', now);
 
   logFocusEvent('break_end', { reason });
 
   console.log(`[electron] 휴식 종료 (${reason})`);
   refreshTray();
+  broadcastFocusState();
 }
 
 // ---- 트레이 메뉴 ----
@@ -597,7 +751,8 @@ ipcMain.on('alert-action', (event, action) => {
   } else if (action.actionId === 'confirm_resume') {
     const now = Date.now();
     if (focusSession.driftStartedAt) {
-      logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt, confirmedManually: true });
+      focusSession.lastReturnMs = now - focusSession.driftStartedAt;
+      logFocusEvent('drift_end', { durationMs: focusSession.lastReturnMs, confirmedManually: true });
     }
     focusSession.lastFocusApp = focusSession.pendingReturnApp || focusSession.lastFocusApp;
     focusSession.pendingReturnApp = null;
@@ -605,6 +760,9 @@ ipcMain.on('alert-action', (event, action) => {
     focusSession.driftAppName = null;
     focusSession.ignoredCurrentDrift = false;
     focusSession.snoozedUntil = 0;
+    focusSession.focusStreakStartedAt = now;
+    setCurrentState('focus', now);
+    broadcastFocusState();
   }
 
   if (win && !win.isDestroyed()) win.close();
@@ -636,6 +794,11 @@ ipcMain.on('start-break', (event, minutes) => {
 ipcMain.on('cancel-break-picker', () => {
   if (breakPickerWindow && !breakPickerWindow.isDestroyed()) breakPickerWindow.close();
 });
+
+// ---- 앱 내부(React) 집중 컨트롤용 ----
+ipcMain.on('stop-focus-session', () => stopFocusSession());
+ipcMain.on('resume-focus', () => endBreak('manual'));
+ipcMain.handle('get-focus-state', () => buildFocusSnapshot());
 
 app.whenReady().then(async () => {
   createTray();
