@@ -4,7 +4,14 @@ const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const http = require('node:http');
 
-if (require('electron-squirrel-startup')) app.quit();
+// Windows Squirrel 인스톨러 전용 처리. 이 모듈은 패키징 빌드에만 필요하고
+// macOS/개발 환경에는 없을 수 있어서, 없으면 조용히 건너뛴다(없다고 앱이
+// 아예 안 뜨면 안 되므로).
+try {
+  if (require('electron-squirrel-startup')) app.quit();
+} catch {
+  // 미설치(개발/비Windows) — 무시
+}
 
 // get-windows는 ESM 전용이라 CommonJS인 여기서는 동적 import()로 한 번만
 // 불러와서 재사용한다.
