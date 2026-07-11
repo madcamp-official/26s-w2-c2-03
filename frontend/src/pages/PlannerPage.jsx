@@ -121,7 +121,7 @@ export default function PlannerPage() {
 
       closingRef.current = true;
       const dateToClose = dayEndDate;
-      closeDay(dateToClose, tasks)
+      closeDay(dateToClose, tasks, dayEndTime)
         .then(() => {
           setTasks([]);
           setDayEndTime(null);

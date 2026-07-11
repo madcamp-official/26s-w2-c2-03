@@ -61,8 +61,8 @@ export function fetchDailyArchive(date) {
   return getJson(`/api/daily-archives/${date}`);
 }
 
-export function closeDay(date, tasks) {
-  return postJson('/api/daily-archives/close-day', { date, tasks });
+export function closeDay(date, tasks, dayEndTime) {
+  return postJson('/api/daily-archives/close-day', { date, tasks, dayEndTime });
 }
 
 // ---- auth ----

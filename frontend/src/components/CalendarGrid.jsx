@@ -11,6 +11,7 @@ import {
 } from '../utils/calendarGrid.js';
 import { formatDate } from '../utils/formatDate.js';
 import { fetchDailyArchive } from '../api.js';
+import DayWheel from './DayWheel.jsx';
 
 const MAX_VISIBLE_CHIPS = 3;
 
@@ -21,8 +22,10 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
   const [expandedDayKey, setExpandedDayKey] = useState(null);
   const [archiveDate, setArchiveDate] = useState(null);
   const [archiveTasks, setArchiveTasks] = useState(null);
+  const [archiveDayEndTime, setArchiveDayEndTime] = useState(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState(null);
+  const [showArchiveWheel, setShowArchiveWheel] = useState(false);
 
   const grid = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
 
@@ -44,13 +47,22 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
     setSelectedId(null);
     setArchiveDate(key);
     setArchiveTasks(null);
+    setArchiveDayEndTime(null);
     setArchiveError(null);
+    setShowArchiveWheel(false);
     setArchiveLoading(true);
     fetchDailyArchive(key)
-      .then((data) => setArchiveTasks(data.tasks))
+      .then((data) => {
+        setArchiveTasks(data.tasks);
+        setArchiveDayEndTime(data.dayEndTime || null);
+      })
       .catch((err) => setArchiveError(err.message || '기록을 불러오지 못했어요'))
       .finally(() => setArchiveLoading(false));
   }
+
+  // 시간표를 그릴 수 있는(시작 시간이 있는) 항목이 하나라도 있는지
+  const archiveHasSchedule = Array.isArray(archiveTasks)
+    && archiveTasks.some((t) => typeof t.startTime === 'string' && t.startTime);
 
   function handleDrop(e, day) {
     e.preventDefault();
@@ -195,7 +207,10 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
       {archiveDate && (
         <div className="calendar-archive">
           <div className="calendar-archive-head">
-            <p className="field-label">{archiveDate}의 오늘의 계획 기록</p>
+            <p className="field-label">
+              {archiveDate}의 오늘의 계획 기록
+              {archiveDayEndTime && <span className="mono calendar-archive-endtime"> · 마감 {archiveDayEndTime}</span>}
+            </p>
             <button type="button" className="btn-ghost" onClick={() => setArchiveDate(null)}>닫기</button>
           </div>
 
@@ -207,17 +222,28 @@ export default function CalendarGrid({ events, onUpdate, onRemove }) {
           )}
 
           {!archiveLoading && !archiveError && archiveTasks && archiveTasks.length > 0 && (
-            <ul className="calendar-archive-list">
-              {archiveTasks.map((t) => (
-                <li key={t.id} className={`calendar-archive-row${t.done ? ' is-done' : ''}`}>
-                  <span className="calendar-archive-check">{t.done ? '✓' : '○'}</span>
-                  <span className="calendar-archive-title">{t.title}</span>
-                  <span className="mono calendar-archive-time">
-                    {t.startTime ? `${t.startTime} · ` : ''}{t.targetMinutes}분
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="calendar-archive-list">
+                {archiveTasks.map((t) => (
+                  <li key={t.id} className={`calendar-archive-row${t.done ? ' is-done' : ''}`}>
+                    <span className="calendar-archive-check">{t.done ? '✓' : '○'}</span>
+                    <span className="calendar-archive-title">{t.title}</span>
+                    <span className="mono calendar-archive-time">
+                      {t.startTime ? `${t.startTime} · ` : ''}{t.targetMinutes}분
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {archiveHasSchedule && (
+                <div className="calendar-archive-wheel">
+                  <button type="button" className="btn-ghost" onClick={() => setShowArchiveWheel((v) => !v)}>
+                    {showArchiveWheel ? '시간표 접기' : '시간표 보기'}
+                  </button>
+                  {showArchiveWheel && <DayWheel items={archiveTasks} dayEndTime={archiveDayEndTime} />}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

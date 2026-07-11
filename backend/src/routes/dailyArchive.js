@@ -9,11 +9,11 @@ router.use(requireAuth);
 // 지난 날짜의 "오늘의 계획" 기록 조회 (캘린더에서 지난 날짜 클릭 시 사용)
 router.get('/:date', (req, res) => {
   const row = db
-    .prepare('SELECT date, tasks_json, archived_at FROM daily_archives WHERE user_id = ? AND date = ?')
+    .prepare('SELECT date, tasks_json, archived_at, day_end_time FROM daily_archives WHERE user_id = ? AND date = ?')
     .get(req.user.id, req.params.date);
 
   if (!row) {
-    return res.json({ date: req.params.date, tasks: null, archivedAt: null });
+    return res.json({ date: req.params.date, tasks: null, archivedAt: null, dayEndTime: null });
   }
 
   let tasks = [];
@@ -22,7 +22,7 @@ router.get('/:date', (req, res) => {
   } catch {
     tasks = [];
   }
-  res.json({ date: row.date, tasks, archivedAt: row.archived_at });
+  res.json({ date: row.date, tasks, archivedAt: row.archived_at, dayEndTime: row.day_end_time || null });
 });
 
 // 하루 마무리 시간(+유예시간)이 지나면 프론트에서 호출 — 현재 "오늘의 계획"을
@@ -32,24 +32,29 @@ router.get('/:date', (req, res) => {
 // 읽을 경우 아직 반영되지 않은(비어 있거나 오래된) 상태를 그대로 아카이빙해
 // 버리는 문제가 있었다.
 router.post('/close-day', (req, res) => {
-  const { date, tasks } = req.body;
+  const { date, tasks, dayEndTime } = req.body;
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: '날짜 형식이 올바르지 않아요' });
   }
   if (!Array.isArray(tasks)) {
     return res.status(400).json({ error: '태스크 목록 형식이 올바르지 않아요' });
   }
+  // 하루 마무리(마감) 시간 — "HH:MM" 형식만 저장하고, 그 외에는 기록하지 않는다.
+  const normalizedDayEndTime = typeof dayEndTime === 'string' && /^\d{2}:\d{2}$/.test(dayEndTime)
+    ? dayEndTime
+    : null;
 
   try {
     db.exec('BEGIN IMMEDIATE');
 
     db.prepare(`
-      INSERT INTO daily_archives (user_id, date, tasks_json, archived_at)
-      VALUES (?, ?, ?, datetime('now'))
+      INSERT INTO daily_archives (user_id, date, tasks_json, archived_at, day_end_time)
+      VALUES (?, ?, ?, datetime('now'), ?)
       ON CONFLICT(user_id, date) DO UPDATE SET
         tasks_json = excluded.tasks_json,
-        archived_at = excluded.archived_at
-    `).run(req.user.id, date, JSON.stringify(tasks));
+        archived_at = excluded.archived_at,
+        day_end_time = excluded.day_end_time
+    `).run(req.user.id, date, JSON.stringify(tasks), normalizedDayEndTime);
 
     db.prepare('DELETE FROM planner_tasks WHERE user_id = ?').run(req.user.id);
 
