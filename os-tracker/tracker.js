@@ -1,4 +1,8 @@
-const { uIOhook } = require('uiohook-napi');
+// 원래 쓰던 uiohook-napi(SnosMe)는 macOS 14+에서 이벤트를 아예 못 잡는
+// 미해결 업스트림 버그가 있어서(GitHub #36, 우리 증상과 정확히 일치:
+// start()는 성공하지만 클릭/키 입력이 하나도 안 잡힘), 최신 libuiohook
+// 소스를 반영한 커뮤니티 포크로 교체함. API는 100% 동일해서 이 줄만 바뀜.
+const { uIOhook } = require('@mukea/uiohook-napi');
 const axios = require('axios');
 
 // 🌟 중요: 아까 backend 서버 포트인 4000번으로 주소를 정확히 맞춰줍니다.
