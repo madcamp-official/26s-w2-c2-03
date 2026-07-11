@@ -9,6 +9,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState(null); // 이메일 미설정(개발 모드)일 때만 채워짐
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const { refresh } = useAuth();
@@ -23,7 +24,15 @@ export default function SignupPage() {
     }
     setLoading(true);
     try {
-      await sendVerificationCode({ email, password, passwordConfirm });
+      const res = await sendVerificationCode({ email, password, passwordConfirm });
+      // 개발 모드(이메일 미설정)면 서버가 인증번호를 직접 내려준다 — 화면에
+      // 표시하고 입력칸을 미리 채워 바로 진행할 수 있게 한다.
+      if (res && res.devCode) {
+        setDevCode(res.devCode);
+        setCode(res.devCode);
+      } else {
+        setDevCode(null);
+      }
       setStep('code');
     } catch (err) {
       setError(err.message);
@@ -91,6 +100,11 @@ export default function SignupPage() {
         {step === 'code' && (
           <form onSubmit={handleVerify} className="task-input">
             <p className="auth-hint">{email}로 인증번호를 보냈어요.</p>
+            {devCode && (
+              <p className="dev-code-notice">
+                개발 모드(이메일 미설정): 인증번호 <b className="mono">{devCode}</b> — 이미 입력해 뒀어요.
+              </p>
+            )}
             <label className="field-label" htmlFor="signup-code">인증번호</label>
             <input
               id="signup-code"

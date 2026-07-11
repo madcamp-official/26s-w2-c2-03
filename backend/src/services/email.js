@@ -8,8 +8,15 @@ const FROM = 'Zonemate <onboarding@resend.dev>';
 // 실제로 이메일을 보낼 때만 인스턴스를 만들도록 지연시켜서, 이 기능만
 // 아직 설정 안 됐을 때도 나머지 서버는 정상적으로 뜨게 한다.
 export async function sendVerificationCode(email, code) {
+  // 이메일 provider(RESEND_API_KEY)가 설정되지 않은 개발/데모 환경에서는
+  // 실제 발송 대신 콘솔에 코드를 남기고, 호출부가 이를 화면에 노출할 수
+  // 있도록 devCode를 돌려준다. 이렇게 해야 메일 서비스 없이도 이메일
+  // 가입/로그인 플로우가 실제로 동작한다.
+  // (실서비스 전환 시: RESEND_API_KEY 발급 + 자체 도메인 인증 필요.
+  //  resend.dev 샌드박스는 계정 소유자 본인 메일로만 발송된다.)
   if (!process.env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY가 설정되지 않았어요. backend/.env를 확인해주세요.');
+    console.log(`\n[개발 모드 · 이메일 미설정] ${email} 인증번호: ${code}\n`);
+    return { delivered: false, devCode: code };
   }
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
@@ -21,4 +28,5 @@ export async function sendVerificationCode(email, code) {
   if (error) {
     throw new Error(error.message || '이메일 전송에 실패했어요');
   }
+  return { delivered: true };
 }

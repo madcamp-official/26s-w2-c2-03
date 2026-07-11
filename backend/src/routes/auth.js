@@ -65,14 +65,19 @@ router.post('/email/send-code', async (req, res) => {
        expires_at = excluded.expires_at, attempts = 0`
   ).run(email, code, hashPassword(password), expiresAt);
 
+  let result;
   try {
-    await sendVerificationCode(email, code);
+    result = await sendVerificationCode(email, code);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: '인증 메일 전송에 실패했어요. 잠시 후 다시 시도해주세요.' });
   }
 
-  res.json({ ok: true });
+  // 이메일 provider 미설정(개발 모드)일 때만 devCode를 내려줘서 화면에서
+  // 바로 진행할 수 있게 한다. 실제 발송된 경우에는 코드를 노출하지 않는다.
+  const body = { ok: true };
+  if (result && result.delivered === false) body.devCode = result.devCode;
+  res.json(body);
 });
 
 router.post('/email/verify', (req, res) => {
