@@ -1,13 +1,7 @@
-// CENTER가 RADIUS+바깥쪽 라벨 여백보다 커야, 9시/3시 방향(가장 왼쪽/오른쪽)
-// 라벨이 SVG viewBox 밖으로 잘리지 않는다.
-const RADIUS = 110;
-const CENTER = 155;
-const SIZE = CENTER * 2;
-
-const TYPE_COLOR = {
-  task: 'var(--signal)',
-  break: 'var(--noise)',
-};
+// 등록된 일정 중심의 가로 타임라인(간트형) 시간표.
+// 기존 24시간 원형 파이는 실제 등록된 일정이 아주 작은 조각으로만 보여
+// 가시성이 떨어졌다. 대신 "가장 이른 시작 ~ 가장 늦은 끝" 구간만 확대해
+// 각 일정을 큰 막대로 보여줘 등록된 일정에 비중을 둔다.
 
 function parseTimeToMinutes(time) {
   if (!time || typeof time !== 'string') return null;
@@ -22,21 +16,6 @@ function minutesToTime(total) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function polarPoint(cx, cy, r, angleDeg) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-// 파이 조각(중심에서 뻗어나가는 부채꼴) 경로. sweep=1(시계 방향)로 그려서
-// angle 0 = 자정(12시 방향), angle 90 = 06:00(3시 방향)이 되도록 맞춘다.
-function slicePath(cx, cy, r, startAngle, endAngle) {
-  const clampedEnd = Math.max(endAngle, startAngle + 0.5);
-  const s = polarPoint(cx, cy, r, startAngle);
-  const e = polarPoint(cx, cy, r, clampedEnd);
-  const largeArc = clampedEnd - startAngle > 180 ? 1 : 0;
-  return `M ${cx} ${cy} L ${s.x} ${s.y} A ${r} ${r} 0 ${largeArc} 1 ${e.x} ${e.y} Z`;
-}
-
 export default function DayWheel({ items, dayEndTime }) {
   const scheduled = items
     .filter((it) => parseTimeToMinutes(it.startTime) !== null)
@@ -47,81 +26,73 @@ export default function DayWheel({ items, dayEndTime }) {
       return { ...it, start, end };
     })
     .filter((it) => it.end > it.start)
-    .sort((a, b) => a.start - b.start);
+    .sort((a, b) => a.start - b.start || a.end - b.end);
 
   if (scheduled.length === 0) {
     return (
       <p className="hint-text">
-        시간표를 그리려면 각 항목의 시작 시간이 필요해요. John과의 대화에서 몇 시에 시작할지 알려주면 채워져요.
+        시간표를 그리려면 각 항목의 시작 시간이 필요해요. 시작 시간을 지정하면 여기에 타임라인으로 그려져요.
       </p>
     );
   }
 
-  const slices = [];
-  let cursor = 0;
-  for (const it of scheduled) {
-    if (it.start > cursor) {
-      slices.push({ id: `gap-${cursor}`, start: cursor, end: it.start, gap: true });
-    }
-    slices.push({ ...it, gap: false });
-    cursor = Math.max(cursor, it.end);
-  }
-  if (cursor < 24 * 60) {
-    slices.push({ id: `gap-${cursor}`, start: cursor, end: 24 * 60, gap: true });
-  }
+  const dayEndMin = parseTimeToMinutes(dayEndTime);
 
-  const dayEndMinutes = parseTimeToMinutes(dayEndTime);
+  // 등록된 일정 구간만 확대(+마감 시각 포함). 앞뒤로 30분 여유를 둔다.
+  const minStart = Math.min(...scheduled.map((s) => s.start));
+  const maxEnd = Math.max(...scheduled.map((s) => s.end), dayEndMin ?? -Infinity);
+  let windowStart = Math.max(0, Math.floor((minStart - 30) / 60) * 60);
+  let windowEnd = Math.min(24 * 60, Math.ceil((maxEnd + 30) / 60) * 60);
+  if (windowEnd - windowStart < 60) windowEnd = Math.min(24 * 60, windowStart + 60);
+  const span = windowEnd - windowStart;
+
+  const pct = (min) => `${((min - windowStart) / span) * 100}%`;
+
+  // 시간 눈금(정시). 구간이 길면 라벨 간격을 벌려 안 겹치게 한다.
+  const totalHours = span / 60;
+  const hourStep = totalHours > 10 ? 2 : 1;
+  const ticks = [];
+  for (let h = Math.ceil(windowStart / 60); h * 60 <= windowEnd; h += 1) {
+    if ((h - Math.ceil(windowStart / 60)) % hourStep !== 0) continue;
+    ticks.push(h * 60);
+  }
 
   return (
-    <div className="day-wheel">
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="day-wheel-svg" role="img" aria-label="오늘의 원형 시간표">
-        {slices.map((s) => {
-          const startAngle = (s.start / 1440) * 360;
-          const endAngle = (s.end / 1440) * 360;
-          const path = slicePath(CENTER, CENTER, RADIUS, startAngle, endAngle);
-          const fill = s.gap ? 'var(--surface-2)' : TYPE_COLOR[s.type] || 'var(--signal)';
-          return <path key={s.id} d={path} fill={fill} stroke="var(--ground)" strokeWidth="1" />;
-        })}
-
-        {[0, 6, 12, 18].map((h) => {
-          const angle = (h / 24) * 360;
-          const p = polarPoint(CENTER, CENTER, RADIUS + 12, angle);
-          return (
-            <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" className="day-wheel-label">
-              {String(h).padStart(2, '0')}
-            </text>
-          );
-        })}
-
-        {dayEndMinutes !== null && (() => {
-          const angle = (dayEndMinutes / 1440) * 360;
-          const inner = polarPoint(CENTER, CENTER, RADIUS * 0.32, angle);
-          const outer = polarPoint(CENTER, CENTER, RADIUS + 6, angle);
-          const labelPos = polarPoint(CENTER, CENTER, RADIUS + 22, angle);
-          return (
-            <>
-              <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="var(--urgent)" strokeWidth="2" />
-              <text x={labelPos.x} y={labelPos.y} textAnchor="middle" dominantBaseline="middle" className="day-wheel-label day-wheel-label-end">
-                마무리
-              </text>
-            </>
-          );
-        })()}
-
-        <circle cx={CENTER} cy={CENTER} r={RADIUS * 0.32} fill="var(--surface)" stroke="var(--line)" />
-      </svg>
-
-      <ul className="day-wheel-legend">
-        {scheduled.map((it) => (
-          <li key={it.id} className="day-wheel-legend-row">
-            <span className={`day-wheel-dot${it.type === 'break' ? ' is-break' : ''}`} />
-            <span className="day-wheel-legend-title">{it.title}</span>
-            <span className="mono day-wheel-legend-time">
-              {it.startTime}–{minutesToTime(it.end)}
-            </span>
-          </li>
+    <div className="timetable">
+      <div className="timetable-axis">
+        {ticks.map((t) => (
+          <span key={t} className="timetable-tick" style={{ left: pct(t) }}>
+            <span className="timetable-tick-label mono">{minutesToTime(t)}</span>
+          </span>
         ))}
-      </ul>
+        {dayEndMin != null && dayEndMin >= windowStart && dayEndMin <= windowEnd && (
+          <span className="timetable-endline" style={{ left: pct(dayEndMin) }} title={`마무리 ${minutesToTime(dayEndMin)}`}>
+            <span className="timetable-endline-label mono">마무리</span>
+          </span>
+        )}
+      </div>
+
+      <div className="timetable-rows">
+        {scheduled.map((it) => {
+          const left = pct(it.start);
+          const width = `${((it.end - it.start) / span) * 100}%`;
+          return (
+            <div key={it.id} className="timetable-row">
+              {dayEndMin != null && dayEndMin >= windowStart && dayEndMin <= windowEnd && (
+                <span className="timetable-row-endline" style={{ left: pct(dayEndMin) }} />
+              )}
+              <div
+                className={`timetable-bar${it.type === 'break' ? ' is-break' : ''}${it.done ? ' is-done' : ''}`}
+                style={{ left, width }}
+                title={`${it.title} · ${it.startTime}–${minutesToTime(it.end)}`}
+              >
+                <span className="timetable-bar-title">{it.title}</span>
+                <span className="timetable-bar-time mono">{it.startTime}–{minutesToTime(it.end)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
