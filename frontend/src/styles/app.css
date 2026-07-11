@@ -293,6 +293,13 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 .unit-label { color: var(--text-2); font-size: 12px; }
 
 .checklist-add-row { display: flex; gap: 8px; margin-top: 4px; }
+.day-end-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+.day-end-label { font-size: 13px; color: var(--text-1); font-weight: 600; }
+input.day-end-input { width: 110px; flex: none; margin: 0; padding: 8px 10px; }
+.day-end-hint { flex-basis: 100%; margin: 0; }
 
 .row-remove {
   background: none; border: none; color: var(--text-2); cursor: pointer;
@@ -353,7 +360,10 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
   border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
   text-align: center; display: inline-block;
 }
-.calendar-cell.is-clickable:hover .calendar-cell-date.is-today { color: var(--signal-ink); }
+/* 오늘 날짜 원은 어떤 상태(hover/선택)에서도 흰 글자를 유지해야 signal 배경
+   위에서 숫자가 안 보이는 문제가 생기지 않는다. */
+.calendar-cell.is-clickable:hover .calendar-cell-date.is-today,
+.calendar-cell.is-selected .calendar-cell-date.is-today { color: var(--signal-ink); }
 .calendar-cell-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
 
 .calendar-chip {

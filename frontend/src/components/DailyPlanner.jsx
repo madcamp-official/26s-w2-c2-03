@@ -216,6 +216,18 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
             <button type="button" className="btn-ghost" onClick={() => addItem('task')}>+ 작업 추가</button>
             <button type="button" className="btn-ghost" onClick={() => addItem('break')}>+ 휴식 추가</button>
           </div>
+
+          <div className="day-end-row">
+            <label className="day-end-label" htmlFor="day-end-time">하루 마무리 시간</label>
+            <input
+              id="day-end-time"
+              type="time"
+              className="day-end-input mono"
+              value={dayEndTime || ''}
+              onChange={(e) => onDayEndTimeChange(e.target.value || null)}
+            />
+            <span className="day-end-hint hint-text">이 시간이 지나면 오늘 계획을 캘린더 기록으로 넘기고 새로 시작해요.</span>
+          </div>
         </div>
       )}
     </section>
