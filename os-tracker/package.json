@@ -12,8 +12,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@mukea/uiohook-napi": "^2.0.1",
     "axios": "^1.18.1",
-    "get-windows": "^9.3.0",
-    "uiohook-napi": "^1.5.5"
+    "get-windows": "^9.3.0"
   }
 }
