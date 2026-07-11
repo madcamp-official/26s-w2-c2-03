@@ -92,6 +92,13 @@ export default function FocusMode({ state, now, controls }) {
           {statusText}
         </div>
 
+        {state.taskTitle && (
+          <div className="focus-current-task">
+            <span className="focus-current-task-kicker mono">지금 하는 일</span>
+            <span className="focus-current-task-title">{state.taskTitle}</span>
+          </div>
+        )}
+
         <GaugeRing value={onBreak ? state.gauge : state.gauge} />
 
         <div className="focus-primary">

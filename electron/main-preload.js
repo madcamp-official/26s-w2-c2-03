@@ -9,8 +9,12 @@ contextBridge.exposeInMainWorld('zonemate', {
   // 지금 열려 있는 앱 목록(집중 대상 선택용)
   getOpenApps: () => ipcRenderer.invoke('get-open-apps'),
 
-  // 집중 세션 제어
-  startFocus: (focusApps, targetMinutes) => ipcRenderer.send('start-focus-session', { focusApps, targetMinutes }),
+  // 집중 세션 제어. opts = { targetMinutes, taskTitle }
+  startFocus: (focusApps, opts = {}) => ipcRenderer.send('start-focus-session', {
+    focusApps,
+    targetMinutes: opts.targetMinutes ?? null,
+    taskTitle: opts.taskTitle ?? null,
+  }),
   stopFocus: () => ipcRenderer.send('stop-focus-session'),
   startBreak: (minutes) => ipcRenderer.send('start-break', minutes),
   resumeFocus: () => ipcRenderer.send('resume-focus'),

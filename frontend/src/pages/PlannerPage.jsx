@@ -186,7 +186,7 @@ export default function PlannerPage() {
         </header>
 
         {focusModalOpen && (
-          <FocusStartModal controls={focusControls} onClose={() => setFocusModalOpen(false)} />
+          <FocusStartModal controls={focusControls} tasks={tasks} onClose={() => setFocusModalOpen(false)} />
         )}
 
         <nav className="page-nav">

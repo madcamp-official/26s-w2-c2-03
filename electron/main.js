@@ -331,6 +331,7 @@ const focusSession = {
   focusApps: [],
   focusAppIds: new Set(),
   targetMinutes: null, // 이번 집중 세션의 목표 시간(분), 없으면 null
+  taskTitle: null, // 지금 집중 중인 할 일 제목(오늘 할 일에서 고른 것), 없으면 null
   pollTimer: null,
   broadcastTimer: null,
   driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
@@ -433,6 +434,7 @@ function buildFocusSnapshot() {
     status: focusSession.status, // 'idle' | 'focusing' | 'onBreak'
     isDrifting: focusSession.status === 'focusing' && focusSession.driftStartedAt != null,
     targetMinutes: focusSession.targetMinutes,
+    taskTitle: focusSession.taskTitle,
     focusApps: focusSession.focusApps.map((a) => ({ appId: a.appId, name: a.name })),
     driftAppName: focusSession.driftAppName,
     now,
@@ -667,12 +669,13 @@ async function pollFocus() {
   }
 }
 
-function startFocusSession(focusApps, targetMinutes = null) {
+function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   const now = Date.now();
   focusSession.id = randomUUID();
   focusSession.targetMinutes = Number.isFinite(targetMinutes) && targetMinutes >= 1
     ? Math.round(targetMinutes)
     : null;
+  focusSession.taskTitle = typeof taskTitle === 'string' && taskTitle.trim() ? taskTitle.trim() : null;
   focusSession.status = 'focusing';
   focusSession.focusApps = focusApps;
   focusSession.focusAppIds = new Set(focusApps.map((a) => a.appId));
@@ -721,6 +724,7 @@ function stopFocusSession() {
   focusSession.status = 'idle';
   focusSession.id = null;
   focusSession.currentState = 'idle';
+  focusSession.taskTitle = null;
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.ignoredCurrentDrift = false;
@@ -902,10 +906,11 @@ ipcMain.handle('get-open-apps', async () => {
 });
 
 ipcMain.on('start-focus-session', (event, payload) => {
-  // 예전 형태(배열=focusApps)와 새 형태({ focusApps, targetMinutes }) 모두 허용.
+  // 예전 형태(배열=focusApps)와 새 형태({ focusApps, targetMinutes, taskTitle }) 모두 허용.
   const focusApps = Array.isArray(payload) ? payload : (payload?.focusApps || []);
   const targetMinutes = Array.isArray(payload) ? null : payload?.targetMinutes;
-  startFocusSession(focusApps, targetMinutes);
+  const taskTitle = Array.isArray(payload) ? null : payload?.taskTitle;
+  startFocusSession(focusApps, targetMinutes, taskTitle);
   if (focusSetupWindow && !focusSetupWindow.isDestroyed()) focusSetupWindow.close();
 });
 
