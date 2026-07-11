@@ -1,0 +1,17 @@
+{
+  "name": "zonemate-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zonemate 데스크톱 셸 — 프론트엔드/백엔드/집중도 트래커를 하나의 앱으로 묶는다",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "get-windows": "^9.3.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

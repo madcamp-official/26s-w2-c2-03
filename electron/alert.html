@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      /* Zonemate "앰버 계기판" 톤 — 라이트 고정. 이 창은 vite 서버에 의존하지
+         않도록 토큰을 인라인으로 박아둔다(백그라운드에서 즉시 떠야 하므로). */
+      :root {
+        --ground: #f5f1e8;
+        --surface: #ffffff;
+        --surface-2: #ede6d6;
+        --line: #dcd2bc;
+        --signal: #b5660f;
+        --signal-ink: #ffffff;
+        --noise: #5b6472;
+        --urgent: #b23a2c;
+        --text-1: #241d14;
+        --text-2: #6b5d46;
+        --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; background: transparent; }
+      body {
+        font-family: var(--font-sans);
+        color: var(--text-1);
+        padding: 10px;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--noise);
+        border-radius: 8px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+        padding: 14px 16px;
+        -webkit-app-region: drag; /* 창을 잡아 옮길 수 있게 */
+      }
+      .card.is-overfocus { border-left-color: var(--signal); }
+      .kicker {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-2);
+        margin-bottom: 5px;
+      }
+      .title { font-size: 15px; font-weight: 650; line-height: 1.3; }
+      .message { font-size: 13px; color: var(--text-2); margin-top: 4px; line-height: 1.45; }
+      .actions {
+        margin-top: auto;
+        padding-top: 12px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        -webkit-app-region: no-drag; /* 버튼은 드래그 영역에서 제외 */
+      }
+      button {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.02em;
+        padding: 7px 13px;
+        border-radius: var(--radius, 3px);
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--text-2);
+      }
+      button:hover { border-color: var(--noise); color: var(--text-1); }
+      button.primary {
+        background: var(--signal);
+        border-color: var(--signal);
+        color: var(--signal-ink);
+      }
+      button.primary:hover { filter: brightness(1.07); }
+    </style>
+  </head>
+  <body>
+    <div class="card" id="card">
+      <div class="kicker" id="kicker">집중 신호</div>
+      <div class="title" id="title"></div>
+      <div class="message" id="message"></div>
+      <div class="actions" id="actions"></div>
+    </div>
+
+    <script>
+      const card = document.getElementById('card');
+      const kickerEl = document.getElementById('kicker');
+      const titleEl = document.getElementById('title');
+      const messageEl = document.getElementById('message');
+      const actionsEl = document.getElementById('actions');
+
+      window.zonemateAlert.onData((alert) => {
+        if (alert.type === 'overfocus') {
+          card.classList.add('is-overfocus');
+          kickerEl.textContent = '과몰입 신호';
+        } else {
+          kickerEl.textContent = '이탈 신호';
+        }
+        titleEl.textContent = alert.title || '';
+        messageEl.textContent = alert.message || '';
+
+        actionsEl.innerHTML = '';
+        for (const action of alert.actions || []) {
+          const btn = document.createElement('button');
+          btn.textContent = action.label;
+          if (action.primary) btn.classList.add('primary');
+          btn.addEventListener('click', () => {
+            window.zonemateAlert.sendAction({ alertType: alert.type, actionId: action.id });
+          });
+          actionsEl.appendChild(btn);
+        }
+      });
+    </script>
+  </body>
+</html>
