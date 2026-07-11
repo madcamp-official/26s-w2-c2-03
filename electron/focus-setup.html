@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        --ground: #f5f1e8;
+        --surface: #ffffff;
+        --surface-2: #ede6d6;
+        --line: #dcd2bc;
+        --signal: #b5660f;
+        --signal-dim: #c9985e;
+        --signal-ink: #ffffff;
+        --noise: #5b6472;
+        --text-1: #241d14;
+        --text-2: #6b5d46;
+        --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace;
+        --radius: 3px;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; }
+      body {
+        font-family: var(--font-sans);
+        color: var(--text-1);
+        background: var(--ground);
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+      }
+      .kicker {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--signal);
+        margin-bottom: 6px;
+      }
+      h1 { font-size: 17px; font-weight: 650; line-height: 1.35; }
+      .sub { font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.5; }
+      .app-list {
+        flex: 1;
+        overflow-y: auto;
+        margin: 16px 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+      .app-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+        cursor: pointer;
+      }
+      .app-row:last-child { border-bottom: none; }
+      .app-row:hover { background: var(--surface-2); }
+      .app-row input { width: 16px; height: 16px; cursor: pointer; }
+      .app-name { font-size: 14px; flex: 1; }
+      .app-bundle { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2); }
+      .empty { padding: 20px; font-size: 13px; color: var(--text-2); text-align: center; }
+      .footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .count { font-size: 12.5px; color: var(--text-2); }
+      .buttons { display: flex; gap: 8px; }
+      button {
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        letter-spacing: 0.02em;
+        padding: 9px 16px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--text-2);
+      }
+      button:hover:not(:disabled) { border-color: var(--noise); color: var(--text-1); }
+      button.primary {
+        background: var(--signal);
+        border-color: var(--signal);
+        color: var(--signal-ink);
+      }
+      button.primary:hover:not(:disabled) { filter: brightness(1.07); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+  </head>
+  <body>
+    <div class="kicker">집중 모드</div>
+    <h1>이번 세션에 사용할 앱을 골라주세요</h1>
+    <p class="sub">고른 앱에 있는 동안은 집중으로 봐요. 그 외 다른 창으로 벗어나면 알려드릴게요.</p>
+
+    <div class="app-list" id="appList">
+      <div class="empty">열린 앱을 불러오는 중...</div>
+    </div>
+
+    <div class="footer">
+      <span class="count" id="count">0개 선택됨</span>
+      <div class="buttons">
+        <button id="cancelBtn">취소</button>
+        <button class="primary" id="startBtn" disabled>집중 시작</button>
+      </div>
+    </div>
+
+    <script>
+      const listEl = document.getElementById('appList');
+      const countEl = document.getElementById('count');
+      const startBtn = document.getElementById('startBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const selected = new Map(); // bundleId -> name
+
+      function refreshCount() {
+        countEl.textContent = `${selected.size}개 선택됨`;
+        startBtn.disabled = selected.size === 0;
+      }
+
+      async function loadApps() {
+        const apps = await window.focusSetup.getOpenApps();
+        listEl.innerHTML = '';
+        if (!apps || apps.length === 0) {
+          listEl.innerHTML = '<div class="empty">선택할 수 있는 앱이 없어요.</div>';
+          return;
+        }
+        for (const app of apps) {
+          const row = document.createElement('label');
+          row.className = 'app-row';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.addEventListener('change', () => {
+            if (cb.checked) selected.set(app.bundleId, app.name);
+            else selected.delete(app.bundleId);
+            refreshCount();
+          });
+          const name = document.createElement('span');
+          name.className = 'app-name';
+          name.textContent = app.name;
+          const bundle = document.createElement('span');
+          bundle.className = 'app-bundle';
+          bundle.textContent = app.bundleId || '';
+          row.append(cb, name, bundle);
+          listEl.appendChild(row);
+        }
+      }
+
+      startBtn.addEventListener('click', () => {
+        const focusApps = [...selected.entries()].map(([bundleId, name]) => ({ bundleId, name }));
+        window.focusSetup.startSession(focusApps);
+      });
+      cancelBtn.addEventListener('click', () => window.focusSetup.cancel());
+
+      loadApps();
+    </script>
+  </body>
+</html>
