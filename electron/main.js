@@ -205,6 +205,8 @@ const focusSession = {
   driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
   driftAppName: null,
   snoozedUntil: 0, // 이 시각까지는 재알림하지 않음
+  ignoredCurrentDrift: false, // 이번 이탈에서 "무시하기"를 누른 적이 있는지
+  pendingReturnBundleId: null, // 무시하기 후 자연 복귀를 감지했을 때의 bundleId(확인 전 임시 보관)
   lastFocusBundleId: null, // 마지막으로 집중 앱에 있었던 순간의 bundleId
   breakTimer: null,
   breakEndsAt: null,
@@ -279,6 +281,25 @@ async function pollFocus() {
     const now = Date.now();
 
     if (onFocusApp) {
+      if (focusSession.ignoredCurrentDrift) {
+        // 무시하기를 누른 이탈에서 돌아온 경우엔 자동으로 이탈 종료 처리하지
+        // 않는다 — "재개하기"를 눌러 명시적으로 확인해야 실제로 집중을
+        // 재개한 것으로 본다. 확인 전까지는 이탈 상태(및 통계)를 그대로 유지.
+        if (!alertWindow) {
+          focusSession.pendingReturnBundleId = bundleId;
+          const driftMs = focusSession.driftStartedAt ? now - focusSession.driftStartedAt : 0;
+          showFocusAlert({
+            type: 'resume_confirm',
+            title: '다시 집중을 시작했나요?',
+            message: `방금 전까지 ${Math.round(driftMs / 1000)}초간 "${focusSession.driftAppName || '다른 곳'}"에 있었어요.`,
+            actions: [
+              { id: 'confirm_resume', label: '재개하기', primary: true },
+            ],
+          });
+        }
+        return;
+      }
+
       if (focusSession.driftStartedAt) {
         logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt });
       }
@@ -323,6 +344,8 @@ function startFocusSession(focusApps) {
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
   focusSession.snoozedUntil = 0;
+  focusSession.ignoredCurrentDrift = false;
+  focusSession.pendingReturnBundleId = null;
   focusSession.lastFocusBundleId = focusApps[0]?.bundleId || null;
 
   logFocusEvent('session_start', { focusApps });
@@ -343,6 +366,8 @@ function stopFocusSession() {
   focusSession.id = null;
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
+  focusSession.ignoredCurrentDrift = false;
+  focusSession.pendingReturnBundleId = null;
 
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = null;
@@ -362,6 +387,8 @@ function startBreak(minutes) {
   focusSession.status = 'onBreak';
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
+  focusSession.ignoredCurrentDrift = false;
+  focusSession.pendingReturnBundleId = null;
   if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
 
   const ms = Math.max(1, minutes) * 60000;
@@ -446,8 +473,22 @@ ipcMain.on('alert-action', (event, action) => {
     activateApp(focusSession.lastFocusBundleId);
   } else if (action.actionId === 'ignore') {
     // 5분간 재알림하지 않는다(이탈 자체는 계속 추적 — 무시했다고 해서
-    // 실제로 벗어나 있던 시간 기록이 사라지면 안 되니까).
+    // 실제로 벗어나 있던 시간 기록이 사라지면 안 되니까). 이번 이탈은
+    // "무시됨"으로 표시해서, 나중에 자연 복귀했을 때 자동으로 종료 처리하지
+    // 않고 재개 확인을 받도록 한다.
     focusSession.snoozedUntil = Date.now() + SNOOZE_MS;
+    focusSession.ignoredCurrentDrift = true;
+  } else if (action.actionId === 'confirm_resume') {
+    const now = Date.now();
+    if (focusSession.driftStartedAt) {
+      logFocusEvent('drift_end', { durationMs: now - focusSession.driftStartedAt, confirmedManually: true });
+    }
+    focusSession.lastFocusBundleId = focusSession.pendingReturnBundleId || focusSession.lastFocusBundleId;
+    focusSession.pendingReturnBundleId = null;
+    focusSession.driftStartedAt = null;
+    focusSession.driftAppName = null;
+    focusSession.ignoredCurrentDrift = false;
+    focusSession.snoozedUntil = 0;
   }
 
   const win = BrowserWindow.fromWebContents(event.sender);
