@@ -3,6 +3,8 @@ const { spawn, execFile } = require('node:child_process');
 const path = require('node:path');
 const http = require('node:http');
 
+if (require('electron-squirrel-startup')) app.quit();
+
 // get-windows는 ESM 전용이라 CommonJS인 여기서는 동적 import()로 한 번만
 // 불러와서 재사용한다.
 let getWindowsModulePromise = null;
@@ -11,11 +13,13 @@ function loadGetWindows() {
   return getWindowsModulePromise;
 }
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
 const BACKEND_DIR = path.join(ROOT, 'backend');
 const FRONTEND_DIR = path.join(ROOT, 'frontend');
-const FRONTEND_URL = 'http://localhost:5173';
-const BACKEND_HEALTH_URL = 'http://localhost:4000/api/health';
+const BACKEND_PORT = app.isPackaged ? Number(process.env.ZONEMATE_PORT) || 4000 : 4000;
+const BACKEND_ORIGIN = `http://localhost:${BACKEND_PORT}`;
+const FRONTEND_URL = app.isPackaged ? BACKEND_ORIGIN : 'http://localhost:5173';
+const BACKEND_HEALTH_URL = `${BACKEND_ORIGIN}/api/health`;
 const SMOKE_TEST = process.env.ELECTRON_SMOKE_TEST === '1';
 
 let backendProcess = null;
@@ -33,10 +37,23 @@ let mainWindow = null;
 // BUILTIN_MODULE). 그래서 fork() 대신 spawn('node', ...)으로 PATH에 잡히는
 // 시스템 Node(v22+)를 명시적으로 써서 이 버전 불일치를 피한다.
 function startBackend() {
-  backendProcess = spawn('node', [path.join(BACKEND_DIR, 'src', 'server.js')], {
+  const executable = app.isPackaged ? process.execPath : 'node';
+  const backendEnvironment = {
+    ...process.env,
+    PORT: String(BACKEND_PORT),
+    ...(app.isPackaged ? {
+      ELECTRON_RUN_AS_NODE: '1',
+      APP_BASE_URL: BACKEND_ORIGIN,
+      API_BASE_URL: BACKEND_ORIGIN,
+      DATA_DIR: app.getPath('userData'),
+      DOTENV_CONFIG_PATH: path.join(app.getPath('userData'), '.env'),
+      FRONTEND_DIST_DIR: path.join(FRONTEND_DIR, 'dist'),
+    } : {}),
+  };
+  backendProcess = spawn(executable, [path.join(BACKEND_DIR, 'src', 'server.js')], {
     cwd: BACKEND_DIR,
     stdio: 'inherit',
-    env: process.env,
+    env: backendEnvironment,
   });
   backendProcess.on('exit', (code) => {
     console.log(`[electron] 백엔드 프로세스 종료 (code: ${code})`);
@@ -361,14 +378,16 @@ ipcMain.on('cancel-focus-setup', () => {
 app.whenReady().then(async () => {
   const [backendAlreadyRunning, frontendAlreadyRunning] = await Promise.all([
     isServerReady(BACKEND_HEALTH_URL),
-    isServerReady(FRONTEND_URL),
+    app.isPackaged ? Promise.resolve(false) : isServerReady(FRONTEND_URL),
   ]);
 
   if (backendAlreadyRunning) console.log('[electron] 기존 백엔드(4000)를 재사용합니다.');
   else startBackend();
 
-  if (frontendAlreadyRunning) console.log('[electron] 기존 Vite(5173)를 재사용합니다.');
-  else startFrontend();
+  if (!app.isPackaged) {
+    if (frontendAlreadyRunning) console.log('[electron] 기존 Vite(5173)를 재사용합니다.');
+    else startFrontend();
+  }
 
   try {
     await Promise.all([
