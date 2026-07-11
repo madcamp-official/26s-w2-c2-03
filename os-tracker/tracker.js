@@ -91,10 +91,18 @@ console.log("\n실시간 백그라운드 수집기가 작동 중입니다.");
 printPlatformGuidance();
 console.log("-----------------------------------------");
 
-// Ctrl+C로 종료할 때 훅을 정리하고 끝내서, 종료 후에도 입력 후킹이 남아있는
-// 상태(특히 macOS)가 되지 않도록 한다.
-process.on('SIGINT', () => {
+// Ctrl+C로 종료할 때 프로세스를 확실히 죽인다. 처음에는 uIOhook.stop()을
+// 먼저 부르고 나서 process.exit(0)을 불렀는데, 실제로 macOS에서
+// uIOhook.stop()이 접근성 훅(네이티브 스레드)을 정리하다가 영영 멈춰버리는
+// 게 재현됨 — stop()이 동기 호출이라 거기서 멈추면 그다음 줄인
+// process.exit(0)에 아예 도달하지 못해서 Ctrl+C를 눌러도 프로세스가 안 죽는
+// 원인이었다. stop()이 반환된다는 보장이 없으므로 아예 기다리지 않고
+// 바로 강제 종료한다 — 어차피 프로세스가 죽으면 OS가 네이티브 훅도 같이
+// 정리해준다.
+function shutdown() {
   console.log('\n수집기를 종료합니다...');
-  uIOhook.stop();
   process.exit(0);
-});
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
