@@ -114,7 +114,10 @@ export default function FocusMode({ state, now, controls }) {
         </div>
 
         {focusAppNames && (
-          <p className="focus-apps-line hint-text">집중 대상: {focusAppNames}</p>
+          <p className="focus-apps-line hint-text">
+            집중 대상: {focusAppNames}
+            {state.targetMinutes ? ` · 목표 ${state.targetMinutes}분` : ''}
+          </p>
         )}
 
         <div className="focus-stats">

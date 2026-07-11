@@ -284,10 +284,11 @@ const BROADCAST_INTERVAL_MS = 1000;
 const GAUGE_ALPHA = 0.15;
 
 // ---- 선제 알림(웰빙) 기준 ----
-// 과몰입: 쉬지 않고 이어서 집중한 시간이 이 값을 넘으면 "휴식 권장" 알림.
-// (지금 세션에는 작업별 "예정 시간" 개념이 없어서, 절대 시간 기준으로 잡았다.
-// 나중에 목표 시간이 생기면 focusEngine처럼 예정×1.5배로 바꿀 수 있다.)
-const OVERFOCUS_STREAK_MS = 50 * 60 * 1000;
+// 과몰입: 집중 시작 때 받은 목표 시간(targetMinutes)의 이 배수를 쉬지 않고
+// 넘기면 "휴식 권장" 알림. 목표 시간을 입력하지 않았으면 아래 절대 시간을
+// 대신 쓴다.
+const OVERFOCUS_MULTIPLIER = 1.5;
+const OVERFOCUS_STREAK_MS = 50 * 60 * 1000; // 목표 시간 미입력 시 폴백
 // 과몰입 알림을 무시하고 계속 집중하면, 이 간격마다 다시 권한다.
 const OVERFOCUS_REMIND_MS = 20 * 60 * 1000;
 // 집중 저하: 누적 딴짓 시간이 누적 집중 시간의 이 배수 이상이면 "잠깐 쉬고
@@ -313,6 +314,7 @@ const focusSession = {
   status: 'idle', // 'idle' | 'focusing' | 'onBreak'
   focusApps: [],
   focusAppIds: new Set(),
+  targetMinutes: null, // 이번 집중 세션의 목표 시간(분), 없으면 null
   pollTimer: null,
   broadcastTimer: null,
   driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
@@ -414,6 +416,7 @@ function buildFocusSnapshot() {
   return {
     status: focusSession.status, // 'idle' | 'focusing' | 'onBreak'
     isDrifting: focusSession.status === 'focusing' && focusSession.driftStartedAt != null,
+    targetMinutes: focusSession.targetMinutes,
     focusApps: focusSession.focusApps.map((a) => ({ appId: a.appId, name: a.name })),
     driftAppName: focusSession.driftAppName,
     now,
@@ -471,13 +474,21 @@ function evaluateWellbeingAlerts() {
   const streakMs = focusingNow && focusSession.focusStreakStartedAt
     ? now - focusSession.focusStreakStartedAt
     : 0;
-  if (focusingNow && streakMs >= OVERFOCUS_STREAK_MS && now >= focusSession.overfocusSnoozedUntil) {
+  // 목표 시간이 있으면 그 1.5배, 없으면 절대 시간(폴백)을 과몰입 기준으로.
+  const overfocusThresholdMs = focusSession.targetMinutes
+    ? focusSession.targetMinutes * 60000 * OVERFOCUS_MULTIPLIER
+    : OVERFOCUS_STREAK_MS;
+  if (focusingNow && streakMs >= overfocusThresholdMs && now >= focusSession.overfocusSnoozedUntil) {
     focusSession.overfocusSnoozedUntil = now + OVERFOCUS_REMIND_MS;
-    logFocusEvent('overfocus_alert', { streakMs });
+    logFocusEvent('overfocus_alert', { streakMs, targetMinutes: focusSession.targetMinutes });
+    const streakMin = Math.round(streakMs / 60000);
+    const message = focusSession.targetMinutes
+      ? `예정한 ${focusSession.targetMinutes}분을 넘겨 ${streakMin}분째 이어서 집중 중이에요. 잠깐 쉬는 건 어때요?`
+      : `쉬지 않고 ${streakMin}분째 집중 중이에요. 잠깐 쉬는 건 어때요?`;
     showFocusAlert({
       type: 'overfocus',
       title: '오래 집중하고 있어요',
-      message: `쉬지 않고 ${Math.round(streakMs / 60000)}분째 집중 중이에요. 잠깐 쉬는 건 어때요?`,
+      message,
       actions: [
         { id: 'take_break', label: '휴식하기', primary: true },
         { id: 'ignore_wellbeing', label: '계속하기' },
@@ -640,9 +651,12 @@ async function pollFocus() {
   }
 }
 
-function startFocusSession(focusApps) {
+function startFocusSession(focusApps, targetMinutes = null) {
   const now = Date.now();
   focusSession.id = randomUUID();
+  focusSession.targetMinutes = Number.isFinite(targetMinutes) && targetMinutes >= 1
+    ? Math.round(targetMinutes)
+    : null;
   focusSession.status = 'focusing';
   focusSession.focusApps = focusApps;
   focusSession.focusAppIds = new Set(focusApps.map((a) => a.appId));
@@ -871,8 +885,11 @@ ipcMain.handle('get-open-apps', async () => {
   }
 });
 
-ipcMain.on('start-focus-session', (event, focusApps) => {
-  startFocusSession(focusApps);
+ipcMain.on('start-focus-session', (event, payload) => {
+  // 예전 형태(배열=focusApps)와 새 형태({ focusApps, targetMinutes }) 모두 허용.
+  const focusApps = Array.isArray(payload) ? payload : (payload?.focusApps || []);
+  const targetMinutes = Array.isArray(payload) ? null : payload?.targetMinutes;
+  startFocusSession(focusApps, targetMinutes);
   if (focusSetupWindow && !focusSetupWindow.isDestroyed()) focusSetupWindow.close();
 });
 

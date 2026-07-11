@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 export default function FocusStartModal({ controls, onClose }) {
   const [apps, setApps] = useState(null); // null=로딩중
   const [selected, setSelected] = useState(() => new Set());
+  const [targetMinutes, setTargetMinutes] = useState('30');
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -35,7 +36,8 @@ export default function FocusStartModal({ controls, onClose }) {
     if (!apps) return;
     const focusApps = apps.filter((a) => selected.has(a.appId));
     if (focusApps.length === 0) return;
-    controls.startFocus(focusApps);
+    const target = Number(targetMinutes);
+    controls.startFocus(focusApps, Number.isFinite(target) && target >= 1 ? target : null);
     onClose();
   }
 
@@ -65,6 +67,21 @@ export default function FocusStartModal({ controls, onClose }) {
               <span className="focus-app-id mono">{app.bundleId || app.path || ''}</span>
             </label>
           ))}
+        </div>
+
+        <div className="focus-target-row">
+          <label htmlFor="focus-target-min">이번 집중 목표 시간</label>
+          <input
+            id="focus-target-min"
+            type="number"
+            min="1"
+            max="480"
+            className="focus-target-input mono"
+            value={targetMinutes}
+            onChange={(e) => setTargetMinutes(e.target.value)}
+          />
+          <span className="focus-target-unit">분</span>
+          <span className="hint-text focus-target-hint">이 시간의 1.5배를 넘겨 집중하면 휴식을 권해요</span>
         </div>
 
         <div className="focus-modal-foot">

@@ -485,3 +485,16 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 .date-event-title { flex: 1; min-width: 0; border: none; background: transparent; font-size: 14px; color: var(--text-1); padding: 4px 2px; }
 .date-event-title:focus { outline: none; border-bottom: 1px solid var(--signal-dim); }
 .date-event-time { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 4px 6px; font-size: 12px; }
+
+/* 집중 시작 모달 — 목표 시간 입력 */
+.focus-target-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 22px; border-top: 1px solid var(--line);
+}
+.focus-target-row label { font-size: 13px; color: var(--text-1); }
+.focus-target-input {
+  width: 68px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); font-size: 14px; text-align: right;
+}
+.focus-target-unit { font-size: 13px; color: var(--text-2); }
+.focus-target-hint { flex-basis: 100%; margin: 0; font-size: 11.5px; }

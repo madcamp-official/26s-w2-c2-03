@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('zonemate', {
   getOpenApps: () => ipcRenderer.invoke('get-open-apps'),
 
   // 집중 세션 제어
-  startFocus: (focusApps) => ipcRenderer.send('start-focus-session', focusApps),
+  startFocus: (focusApps, targetMinutes) => ipcRenderer.send('start-focus-session', { focusApps, targetMinutes }),
   stopFocus: () => ipcRenderer.send('stop-focus-session'),
   startBreak: (minutes) => ipcRenderer.send('start-break', minutes),
   resumeFocus: () => ipcRenderer.send('resume-focus'),
