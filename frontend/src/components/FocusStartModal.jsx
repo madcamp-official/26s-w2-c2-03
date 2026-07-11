@@ -4,14 +4,18 @@ import { useEffect, useState } from 'react';
 // 1) 오늘 할 일 중 지금 집중할 태스크를 고르고(그 태스크의 예상 시간이 목표
 //    시간이 되어 과몰입 판단 기준이 된다), 2) 집중 대상으로 볼 앱을 고른다.
 export default function FocusStartModal({ controls, tasks, onClose }) {
-  const [apps, setApps] = useState(null); // null=로딩중
-  const [selectedApps, setSelectedApps] = useState(() => new Set());
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [error, setError] = useState(null);
-
   // 오늘 할 일 중 아직 안 끝난 '작업' 항목만 후보로.
   const candidateTasks = (tasks || []).filter((t) => t.type === 'task' && !t.done);
+
+  const [apps, setApps] = useState(null); // null=로딩중
+  const [selectedApps, setSelectedApps] = useState(() => new Set());
+  // 어떤 할 일의 집중인지 로그에 남기려고, 기본으로 첫 번째 작업을 선택해 둔다.
+  const [selectedTaskId, setSelectedTaskId] = useState(() => candidateTasks[0]?.id ?? null);
+  const [error, setError] = useState(null);
+
   const selectedTask = candidateTasks.find((t) => t.id === selectedTaskId) || null;
+  // 오늘 할 일이 있으면 어떤 작업인지 반드시 고르게 한다(로그에 남기기 위해).
+  const needsTask = candidateTasks.length > 0 && !selectedTask;
 
   useEffect(() => {
     let cancelled = false;
@@ -101,10 +105,16 @@ export default function FocusStartModal({ controls, tasks, onClose }) {
         <div className="focus-modal-foot">
           <span className="mono hint-text">
             {selectedTask ? `"${selectedTask.title}" · ${selectedApps.size}개 앱` : `${selectedApps.size}개 앱`}
+            {needsTask && <span className="error-text focus-foot-warn"> 집중할 작업을 골라주세요</span>}
           </span>
           <div className="focus-modal-actions">
             <button type="button" className="btn-ghost" onClick={onClose}>취소</button>
-            <button type="button" className="btn-primary" disabled={selectedApps.size === 0} onClick={start}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={selectedApps.size === 0 || needsTask}
+              onClick={start}
+            >
               집중 시작
             </button>
           </div>
