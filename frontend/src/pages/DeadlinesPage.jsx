@@ -3,11 +3,17 @@ import DeadlinePlanner from '../components/DeadlinePlanner.jsx';
 import CalendarGrid from '../components/CalendarGrid.jsx';
 
 export default function DeadlinesPage() {
-  const { events, addEvent, updateEvent, removeEvent } = useOutletContext();
+  const { events, addEvent, updateEvent, removeEvent, tasks, setTasks } = useOutletContext();
   return (
     <>
       <DeadlinePlanner onAddEvent={addEvent} onUpdateEvent={updateEvent} onRemoveEvent={removeEvent} />
-      <CalendarGrid events={events} onUpdate={updateEvent} onRemove={removeEvent} />
+      <CalendarGrid
+        events={events}
+        onUpdate={updateEvent}
+        onRemove={removeEvent}
+        tasks={tasks}
+        setTasks={setTasks}
+      />
     </>
   );
 }

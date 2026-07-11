@@ -65,6 +65,10 @@ export function closeDay(date, tasks, dayEndTime) {
   return postJson('/api/daily-archives/close-day', { date, tasks, dayEndTime });
 }
 
+export function saveDailyArchive(date, tasks, dayEndTime) {
+  return putJson(`/api/daily-archives/${date}`, { tasks, dayEndTime });
+}
+
 // ---- auth ----
 
 export function sendVerificationCode({ email, password, passwordConfirm }) {
