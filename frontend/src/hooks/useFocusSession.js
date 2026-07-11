@@ -33,7 +33,7 @@ export function useFocusSession() {
 
   const controls = {
     getOpenApps: () => bridge.getOpenApps(),
-    startFocus: (apps) => bridge.startFocus(apps),
+    startFocus: (apps, opts) => bridge.startFocus(apps, opts),
     stopFocus: () => bridge.stopFocus(),
     startBreak: (minutes) => bridge.startBreak(minutes),
     resumeFocus: () => bridge.resumeFocus(),

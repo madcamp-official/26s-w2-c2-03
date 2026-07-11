@@ -105,7 +105,7 @@ body {
 }
 .field-label:first-child { margin-top: 0; }
 
-textarea, input[type="text"], input[type="number"], input[type="datetime-local"] {
+textarea, input[type="text"], input[type="number"], input[type="datetime-local"], input[type="time"] {
   font-family: var(--font-sans); font-size: 14px; color: var(--text-1);
   background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius-md);
   padding: 10px 12px; margin-top: 6px; min-width: 0;
@@ -288,7 +288,7 @@ textarea:focus, input:focus {
 
 input.checklist-title-input { flex: 1; margin: 0; background: transparent; border: 1px solid transparent; padding: 6px 8px; }
 input.checklist-title-input:focus { background: var(--ground); border-color: var(--signal-dim); }
-input.checklist-time-input { width: 96px; flex: none; margin: 0; padding: 6px 8px; font-size: 12.5px; }
+input.checklist-time-input { width: 132px; flex: none; margin: 0; padding: 6px 8px; font-size: 12.5px; }
 input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: right; padding: 6px 8px; }
 .unit-label { color: var(--text-2); font-size: 12px; }
 
@@ -298,7 +298,7 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
   margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
 }
 .day-end-label { font-size: 13px; color: var(--text-1); font-weight: 600; }
-input.day-end-input { width: 110px; flex: none; margin: 0; padding: 8px 10px; }
+input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
 .day-end-hint { flex-basis: 100%; margin: 0; }
 
 .row-remove {
