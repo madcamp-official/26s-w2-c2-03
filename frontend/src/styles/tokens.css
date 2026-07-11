@@ -13,7 +13,15 @@
   --text-2: #6B5D46;
   --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace;
+  /* 작은 컨트롤용(3px)은 유지하되, 카드/패널은 더 부드러운 라운드로 고급스럽게 */
   --radius: 3px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+  /* 평평한 테두리 대신 은은한 그림자로 깊이를 준다(라이트 기본값) */
+  --shadow-sm: 0 1px 2px rgba(36, 29, 20, .05), 0 1px 3px rgba(36, 29, 20, .06);
+  --shadow-md: 0 2px 4px rgba(36, 29, 20, .04), 0 6px 18px rgba(36, 29, 20, .07);
+  --shadow-lg: 0 8px 24px rgba(36, 29, 20, .10), 0 18px 48px rgba(36, 29, 20, .12);
+  --ring-focus: 0 0 0 3px rgba(181, 102, 15, .18);
 }
 
 /* 기본값은 항상 라이트모드 — OS 다크모드 설정과 무관하게 고정.
@@ -31,6 +39,10 @@
   --urgent: #E0725F;
   --text-1: #F2E9DA;
   --text-2: #B8A98D;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .4);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .45);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, .5), 0 20px 56px rgba(0, 0, 0, .55);
+  --ring-focus: 0 0 0 3px rgba(232, 163, 61, .22);
 }
 
 :root[data-theme='light'] {

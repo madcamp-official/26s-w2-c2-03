@@ -28,12 +28,15 @@ body {
 .page-nav-link {
   font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em;
   text-transform: uppercase; text-decoration: none; color: var(--text-2);
-  padding: 8px 14px; border-radius: var(--radius); border: 1px solid transparent;
+  padding: 8px 14px; border-radius: var(--radius-md); border: 1px solid transparent;
+  transition: color .14s ease, background .14s ease, box-shadow .14s ease;
 }
-.page-nav-link:hover { color: var(--text-1); }
+.page-nav-link:hover { color: var(--text-1); background: var(--surface-2); }
 .page-nav-link.is-active {
   color: var(--signal-ink); background: var(--signal); border-color: var(--signal);
+  box-shadow: var(--shadow-sm);
 }
+.page-nav-link.is-active:hover { background: var(--signal); }
 
 /* ---- auth pages ---- */
 .auth-page {
@@ -41,18 +44,20 @@ body {
   padding: 40px 24px;
 }
 .auth-card {
-  width: 100%; max-width: 380px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 28px;
+  width: 100%; max-width: 384px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: 34px 32px; box-shadow: var(--shadow-lg);
 }
 .auth-card .wordmark { margin-bottom: 20px; }
 .auth-card h1 { font-size: 18px; margin: 0 0 20px; }
 
 .oauth-buttons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .btn-oauth {
-  display: block; text-align: center; padding: 11px; border-radius: var(--radius);
+  display: block; text-align: center; padding: 12px; border-radius: var(--radius-md);
   font-size: 13.5px; font-weight: 600; text-decoration: none; cursor: pointer;
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
 }
+.btn-oauth:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); filter: brightness(1.02); }
 .btn-kakao { background: #FEE500; color: #191600; }
 .btn-google { background: var(--surface); border: 1px solid var(--line); color: var(--text-1); }
 
@@ -78,7 +83,7 @@ body {
 .task-input {
   display: flex; flex-direction: column; gap: 8px;
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 20px;
+  border-radius: var(--radius-md); padding: 22px; box-shadow: var(--shadow-sm);
 }
 .field-label {
   font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
@@ -88,8 +93,9 @@ body {
 
 textarea, input[type="text"], input[type="number"], input[type="datetime-local"] {
   font-family: var(--font-sans); font-size: 14px; color: var(--text-1);
-  background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius-md);
   padding: 10px 12px; margin-top: 6px; min-width: 0;
+  transition: border-color .14s ease, box-shadow .14s ease;
 }
 textarea { resize: vertical; font-family: inherit; }
 /* 폼 안의 입력만 폭 100% — 이 규칙이 없으면 체크리스트/캘린더 행의
@@ -102,26 +108,28 @@ textarea { resize: vertical; font-family: inherit; }
   width: 100%;
 }
 textarea:focus, input:focus {
-  outline: none; border-color: var(--signal-dim);
+  outline: none; border-color: var(--signal-dim); box-shadow: var(--ring-focus);
 }
 
 .btn-primary, .btn-ghost {
   font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em;
-  border-radius: var(--radius); cursor: pointer; text-transform: uppercase;
+  border-radius: var(--radius-md); cursor: pointer; text-transform: uppercase;
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease, border-color .14s ease, color .14s ease;
 }
 .btn-primary {
   margin-top: 16px; align-self: flex-start;
   background: var(--signal); color: var(--signal-ink); border: none;
-  padding: 10px 18px;
+  padding: 10px 18px; box-shadow: var(--shadow-sm);
 }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-.btn-primary:not(:disabled):hover { filter: brightness(1.08); }
+.btn-primary:not(:disabled):hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.btn-primary:not(:disabled):active { transform: translateY(0); box-shadow: var(--shadow-sm); }
 
 .btn-ghost {
   background: var(--surface); border: 1px solid var(--line); color: var(--text-2);
   padding: 8px 12px;
 }
-.btn-ghost:hover { border-color: var(--signal-dim); color: var(--text-1); }
+.btn-ghost:hover { border-color: var(--signal-dim); color: var(--text-1); box-shadow: var(--shadow-sm); }
 
 .btn-link {
   align-self: flex-start; margin-top: 4px;
@@ -161,18 +169,18 @@ textarea:focus, input:focus {
 /* ---- 오늘의 계획 챗봇 (John) ---- */
 .chat-panel {
   display: flex; flex-direction: column; gap: 10px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: 20px; box-shadow: var(--shadow-md);
 }
 
 .chat-persona {
-  display: flex; align-items: center; gap: 10px;
-  padding-bottom: 12px; margin-bottom: 2px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 11px;
+  padding-bottom: 14px; margin-bottom: 2px; border-bottom: 1px solid var(--line);
 }
-.chat-persona-info { display: flex; flex-direction: column; gap: 1px; }
-.chat-persona-name { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text-1); }
+.chat-persona-info { display: flex; flex-direction: column; gap: 2px; }
+.chat-persona-name { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text-1); letter-spacing: .01em; }
 .chat-persona-role { font-size: 11.5px; color: var(--text-2); }
-.bot-avatar { flex: none; }
+.bot-avatar { flex: none; filter: drop-shadow(0 2px 5px rgba(181, 102, 15, .28)); }
 
 .chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
 .chat-message { display: flex; align-items: flex-end; gap: 6px; }
@@ -193,8 +201,8 @@ textarea:focus, input:focus {
 /* ---- 원형 시간표 ---- */
 .day-wheel {
   display: flex; flex-direction: column; align-items: center; gap: 14px;
-  margin-top: 4px; padding: 16px;
-  background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
+  margin-top: 4px; padding: 18px;
+  background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius-md);
 }
 .day-wheel-svg { width: 100%; max-width: 260px; height: auto; }
 .day-wheel-label { font-family: var(--font-mono); font-size: 9px; fill: var(--text-2); }
@@ -361,9 +369,9 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
   display: flex; align-items: center; justify-content: center; padding: 24px;
 }
 .focus-modal {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
   width: 100%; max-width: 460px; max-height: 82vh; display: flex; flex-direction: column;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.28); overflow: hidden;
+  box-shadow: var(--shadow-lg); overflow: hidden;
 }
 .focus-modal-head { padding: 20px 22px 12px; }
 .focus-modal-head .kicker {
@@ -424,8 +432,8 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 }
 .focus-stat {
   flex: 1 1 110px; min-width: 100px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 14px 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md);
+  padding: 15px 10px; box-shadow: var(--shadow-sm);
 }
 .focus-stat-value { font-size: 19px; font-weight: 600; color: var(--text-1); }
 .focus-stat-label { font-size: 11.5px; color: var(--text-2); margin-top: 5px; }
@@ -446,8 +454,8 @@ input.checklist-minutes-input { width: 56px; flex: none; margin: 0; text-align: 
 
 /* ==== 날짜별 계획 편집기 (캘린더에서 날짜 클릭) ==== */
 .date-editor {
-  margin-top: 16px; padding: 16px; border: 1px solid var(--line);
-  border-radius: 8px; background: var(--surface);
+  margin-top: 16px; padding: 18px; border: 1px solid var(--line);
+  border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-sm);
 }
 .date-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .date-editor-today { color: var(--signal); }
