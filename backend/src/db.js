@@ -76,11 +76,23 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS focus_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    client_id TEXT,
+    type TEXT NOT NULL,
+    occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
+    meta_json TEXT
+  );
+
   CREATE INDEX IF NOT EXISTS idx_planner_tasks_user_order
     ON planner_tasks(user_id, sort_order);
 
   CREATE INDEX IF NOT EXISTS idx_calendar_events_user_date
     ON calendar_events(user_id, event_date);
+
+  CREATE INDEX IF NOT EXISTS idx_focus_events_session
+    ON focus_events(session_id, occurred_at);
 `);
 
 // planner_tasks에 start_time/source_event_id 컬럼을 나중에 추가했다 —

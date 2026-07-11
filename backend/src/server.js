@@ -8,6 +8,7 @@ import authRouter from './routes/auth.js';
 import plannerDataRouter from './routes/plannerData.js';
 import dailyArchiveRouter from './routes/dailyArchive.js';
 import metricsRouter from './routes/metrics.js';
+import focusEventsRouter from './routes/focusEvents.js';
 
 const app = express();
 app.use(cors({ origin: process.env.APP_BASE_URL || 'http://localhost:5173', credentials: true }));
@@ -24,6 +25,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/planner-data', plannerDataRouter);
 app.use('/api/daily-archives', dailyArchiveRouter);
 app.use('/api/metrics', metricsRouter);
+app.use('/api/focus-events', focusEventsRouter);
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
