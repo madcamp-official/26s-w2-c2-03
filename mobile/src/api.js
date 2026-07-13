@@ -37,5 +37,16 @@ export const pairDevice = ({ code, name, platform }) => request('/api/devices/pa
 export const fetchDevices = () => request('/api/devices');
 export const removeDevice = (id) => request(`/api/devices/${id}`, { method: 'DELETE' });
 
-// ---- 오늘의 계획 / 캘린더 (2단계에서 화면과 함께 채울 자리) ----
+// ---- 오늘의 계획 / 캘린더 ----
 export const fetchPlannerData = () => request('/api/planner-data');
+export const savePlannerData = ({ tasks, events, dayEndTime, dayEndDate }) =>
+  request('/api/planner-data', { method: 'PUT', body: { tasks, events, dayEndTime, dayEndDate } });
+export const generatePlanChat = ({ messages, forceFinalize }) =>
+  request('/api/plan', { method: 'POST', body: { messages, forceFinalize } });
+export const generateDeadlineRoadmap = ({ title, details, deadline }) =>
+  request('/api/deadline-tasks', { method: 'POST', body: { title, details, deadline } });
+
+// ---- 실시간 집중 세션(3단계) ----
+export const fetchFocusSession = () => request('/api/focus-session');
+export const pushFocusSession = (payload) => request('/api/focus-session', { method: 'PUT', body: payload });
+export const stopFocusSessionRemote = () => request('/api/focus-session/stop', { method: 'POST' });
