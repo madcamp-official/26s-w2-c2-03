@@ -215,22 +215,68 @@ function createWindow() {
   }
 }
 
-// 대시보드용 기록 — 세션/이탈/휴식 이벤트를 백엔드에 남긴다. 지금은 인증
-// 없이 기기 단위로만 기록한다(Electron 메인 프로세스는 브라우저 로그인
-// 쿠키가 없어서, 로그인 사용자와 제대로 묶으려면 별도 인증 브릿지가 필요 —
-// 그건 대시보드를 실제로 만들 때 같이 풀 문제). 네트워크 실패는 로그만
-// 남기고 무시한다 — 기록 실패가 집중 세션 자체를 막아서는 안 된다.
+// 렌더러(로그인된 브라우저 세션)가 로그인 시 authToken 쿠키에서 읽어 건네준
+// 값 — 메인 프로세스는 별도 Node 프로세스라 브라우저 쿠키 저장소에 직접
+// 접근할 수 없어서, 백엔드에 자기 명의로(집중 이벤트 기록·실시간 세션
+// 동기화) 요청하려면 이렇게 받아둔 토큰을 Authorization 헤더로 실어야 한다.
+let currentAuthToken = null;
+ipcMain.on('set-auth-token', (event, token) => {
+  currentAuthToken = token || null;
+});
+
+function authedRequestOptions(method) {
+  return {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(currentAuthToken ? { Authorization: `Bearer ${currentAuthToken}` } : {}),
+    },
+  };
+}
+
+// 대시보드용 기록 — 세션/이탈/휴식 이벤트를 백엔드에 남긴다. 로그인 전이라
+// currentAuthToken이 아직 없으면(예: 앱 시작 직후) 서버가 401로 거부하므로,
+// 이 경우 조용히 건너뛴다 — 기록 실패가 집중 세션 자체를 막아서는 안 된다.
 function logFocusEvent(type, meta) {
-  if (!focusSession.id) return;
+  if (!focusSession.id || !currentAuthToken) return;
   const payload = JSON.stringify({ sessionId: focusSession.id, clientId: 'zonemate-desktop', type, meta });
   const eventsUrl = `${BACKEND_ORIGIN}/api/focus-events`;
-  const req = httpClientFor(eventsUrl).request(
-    eventsUrl,
-    { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } },
-    (res) => res.resume(),
-  );
+  const options = authedRequestOptions('POST');
+  options.headers['Content-Length'] = Buffer.byteLength(payload);
+  const req = httpClientFor(eventsUrl).request(eventsUrl, options, (res) => res.resume());
   req.on('error', (err) => console.error('[electron] 집중 이벤트 기록 실패:', err.message));
   req.write(payload);
+  req.end();
+}
+
+// 다른 기기(모바일)가 폴링해서 "지금 집중 중이에요"를 따라 보여줄 수 있게,
+// 이 계정의 실시간 상태를 서버에 밀어 넣는다. 로그인 전이면 조용히
+// 건너뛴다(로컬 상태만으로도 이 앱 자체는 정상 동작해야 하므로).
+function pushLiveFocusSession(status) {
+  if (!currentAuthToken) return;
+  const payload = JSON.stringify({
+    status,
+    taskTitle: focusSession.taskTitle,
+    targetMinutes: focusSession.targetMinutes,
+    source: 'desktop',
+    gauge: Math.round(focusSession.gauge),
+    currentState: focusSession.currentState,
+    startedAt: focusSession.sessionStartedAt ? new Date(focusSession.sessionStartedAt).toISOString() : null,
+  });
+  const url = `${BACKEND_ORIGIN}/api/focus-session`;
+  const options = authedRequestOptions('PUT');
+  options.headers['Content-Length'] = Buffer.byteLength(payload);
+  const req = httpClientFor(url).request(url, options, (res) => res.resume());
+  req.on('error', () => {}); // 실시간 미러링은 부가 기능 — 실패해도 로그 스팸 안 낸다(2초마다 시도되므로)
+  req.write(payload);
+  req.end();
+}
+
+function stopLiveFocusSession() {
+  if (!currentAuthToken) return;
+  const url = `${BACKEND_ORIGIN}/api/focus-session/stop`;
+  const req = httpClientFor(url).request(url, authedRequestOptions('POST'), (res) => res.resume());
+  req.on('error', () => {});
   req.end();
 }
 
@@ -701,12 +747,24 @@ function broadcastFocusState() {
   }
 }
 
+// 실시간 세션 미러링(모바일이 폴링) 푸시 간격 — 1초 브로드캐스트 타이머에
+// 얹되, 서버에는 이보다 훨씬 뜸하게만 보낸다(매초 PUT은 과함).
+const LIVE_SESSION_PUSH_INTERVAL_MS = 5000;
+let lastLiveSessionPushAt = 0;
+
 function startBroadcasting() {
   if (focusSession.broadcastTimer) clearInterval(focusSession.broadcastTimer);
   // 1초마다: 선제 알림(과몰입/집중 저하) 판단 후 상태를 React로 브로드캐스트.
+  // pollFocus는 status==='focusing'일 때만 돌아서 휴식 중엔 반영이 안 되므로,
+  // 상태 무관하게 도는 이 타이머에서 실시간 미러링 푸시도 같이 처리한다.
   focusSession.broadcastTimer = setInterval(() => {
     evaluateWellbeingAlerts();
     broadcastFocusState();
+    const now = Date.now();
+    if (now - lastLiveSessionPushAt >= LIVE_SESSION_PUSH_INTERVAL_MS) {
+      lastLiveSessionPushAt = now;
+      pushLiveFocusSession(focusSession.status);
+    }
   }, BROADCAST_INTERVAL_MS);
 }
 
@@ -1131,6 +1189,8 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = setInterval(pollFocus, POLL_INTERVAL_MS);
   startBroadcasting();
+  lastLiveSessionPushAt = Date.now();
+  pushLiveFocusSession('focusing'); // 5초 주기까지 안 기다리고 시작을 바로 반영
 
   console.log('[electron] 집중 세션 시작 — 집중 앱:', focusApps.map((a) => a.name).join(', '));
   refreshTray();
@@ -1175,6 +1235,7 @@ function stopFocusSession() {
   });
 
   stopOsTracker(); // 집중 세션 끝나면 키/마우스 수집도 중단
+  stopLiveFocusSession(); // 다른 기기가 폴링 중이면 바로 idle로 보이게(스테일 대기 없이)
 
   focusSession.status = 'idle';
   focusSession.id = null;
@@ -1227,6 +1288,8 @@ function startBreak(minutes) {
   console.log(`[electron] 휴식 시작 — ${minutes}분`);
   refreshTray();
   broadcastFocusState();
+  lastLiveSessionPushAt = Date.now();
+  pushLiveFocusSession('onBreak');
 }
 
 function endBreak(reason) {
@@ -1247,6 +1310,8 @@ function endBreak(reason) {
   console.log(`[electron] 휴식 종료 (${reason})`);
   refreshTray();
   broadcastFocusState();
+  lastLiveSessionPushAt = Date.now();
+  pushLiveFocusSession('focusing');
 }
 
 // ---- 트레이 메뉴 ----

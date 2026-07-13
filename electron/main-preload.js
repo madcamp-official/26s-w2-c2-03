@@ -26,6 +26,13 @@ contextBridge.exposeInMainWorld('zonemate', {
   // 앱 버전(package.json 기준) — 업데이트가 실제로 적용됐는지 화면에서 확인용
   getVersion: () => ipcRenderer.invoke('get-app-version'),
 
+  // 메인 프로세스는 별도 Node 프로세스라 브라우저 쿠키 저장소에 접근할 수
+  // 없다 — 로그인 시 렌더러가 authToken 쿠키(non-httpOnly)에서 읽은 값을
+  // 여기로 건네주면, 메인 프로세스가 집중 이벤트 기록·실시간 세션 동기화
+  // 요청에 Authorization 헤더로 쓴다. 로그아웃 시 clearAuthToken으로 지운다.
+  setAuthToken: (token) => ipcRenderer.send('set-auth-token', token),
+  clearAuthToken: () => ipcRenderer.send('set-auth-token', null),
+
   // 실시간 상태 구독 — 메인 프로세스가 1초마다 보내는 스냅샷을 받는다.
   // 반환값은 구독 해제 함수.
   onState: (callback) => {
