@@ -22,7 +22,7 @@ try {
 if (app.isPackaged) {
   try {
     const { updateElectronApp } = require('update-electron-app');
-    updateElectronApp({ updateInterval: '6 hours' });
+    updateElectronApp({ updateInterval: '30 minutes' });
   } catch (err) {
     console.error('[electron] 자동 업데이트 초기화 실패:', err.message);
   }
