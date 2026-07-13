@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor } = require('electron');
 const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -317,9 +317,13 @@ const DRIFT_ALERT_MS = 6 * 1000;
 const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
 const BROADCAST_INTERVAL_MS = 1000;
-// 집중력 게이지(EMA) 평활 계수. 폴링 tick(2초)마다 갱신되며, 집중이면 +1,
-// 이탈이면 -1, 그 외(자기 창/자리비움)는 현 상태 유지 쪽으로 살짝 당긴다.
-const GAUGE_ALPHA = 0.15;
+// 집중력 게이지(0~100)는 활성 창이 아니라 키보드/마우스 활동으로 움직인다.
+// powerMonitor.getSystemIdleTime()이 마지막 키/마우스 입력 이후 흐른 초를 주므로
+// (네이티브 모듈·추가 권한 불필요), 최근 입력이 있으면 게이지를 올리고 입력이
+// 끊기면 내린다. 폴링 tick(2초)마다 갱신. (창 분류는 집중/이탈 상태·알림·통계 쪽에서 계속 쓴다.)
+const GAUGE_ACTIVE_IDLE_SEC = 4; // 이 초 미만 유휴면 "활발히 입력 중"으로 본다
+const GAUGE_UP_STEP = 4;         // 활동 중일 때 한 tick마다 올리는 양
+const GAUGE_DOWN_STEP = 3;       // 입력이 끊겼을 때 한 tick마다 내리는 양
 
 // ---- 선제 알림(웰빙) 기준 ----
 // 과몰입: 집중 시작 때 받은 목표 시간(targetMinutes)의 이 배수를 쉬지 않고
@@ -376,7 +380,7 @@ const focusSession = {
   totalBreakMs: 0, // 세션 누적 휴식 시간
   lastReturnMs: null, // 가장 최근 이탈에서 돌아오기까지 걸린 시간
   driftCount: 0, // 세션 중 이탈한 횟수
-  gauge: 100, // 집중력 게이지(0~100)
+  gauge: 50, // 집중력 게이지(0~100). 중간값 50에서 시작해 키/마우스 활동으로 오르내린다.
 
   // 선제 알림(웰빙) 스누즈 — 이 시각 전에는 각각 다시 알리지 않는다.
   overfocusSnoozedUntil: 0, // 이번 집중 streak가 새로 시작되면 0으로 리셋
@@ -438,13 +442,8 @@ function accrueStats(now = Date.now()) {
 function setCurrentState(state, now = Date.now()) {
   accrueStats(now);
   focusSession.currentState = state;
-  // 게이지: 집중이면 위로, 이탈이면 아래로 당긴다. 그 외 상태는 유지.
-  let target = null;
-  if (state === 'focus') target = 100;
-  else if (state === 'drift') target = 0;
-  if (target != null) {
-    focusSession.gauge = GAUGE_ALPHA * target + (1 - GAUGE_ALPHA) * focusSession.gauge;
-  }
+  // 게이지는 창 상태가 아니라 키보드/마우스 활동으로만 움직인다
+  // (updateGaugeFromActivity, pollFocus에서 매 tick 호출).
 }
 
 // React에 보낼 현재 상태 스냅샷. 진행 중인 구간까지 반영하려고 먼저 정산한다.
@@ -605,8 +604,21 @@ function openBreakPicker() {
   });
 }
 
+// 집중력 게이지를 키보드/마우스 활동으로 갱신한다. 최근 입력이 있으면(유휴 시간이
+// 짧으면) 올리고, 입력이 끊기면 내린다. 창 종류와 무관하게 "지금 손을 움직이고
+// 있는가"만 본다 — 창 기반 판단(집중/이탈)은 아래 pollFocus 본문에서 따로 한다.
+function updateGaugeFromActivity() {
+  const idleSec = powerMonitor.getSystemIdleTime();
+  if (idleSec < GAUGE_ACTIVE_IDLE_SEC) {
+    focusSession.gauge = Math.min(100, focusSession.gauge + GAUGE_UP_STEP);
+  } else {
+    focusSession.gauge = Math.max(0, focusSession.gauge - GAUGE_DOWN_STEP);
+  }
+}
+
 async function pollFocus() {
   if (focusSession.status !== 'focusing') return;
+  updateGaugeFromActivity();
   try {
     // Zonemate 자기 자신은 집중 대상에서 항상 제외한다 — 집중 중 대시보드나
     // 알림/설정 창을 보고 있는 건 이탈도 집중도 아니므로 아무 것도 세지 않고
@@ -718,7 +730,7 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.totalBreakMs = 0;
   focusSession.lastReturnMs = null;
   focusSession.driftCount = 0;
-  focusSession.gauge = 100;
+  focusSession.gauge = 50;
   focusSession.underfocusSnoozedUntil = 0;
 
   logFocusEvent('session_start', {
