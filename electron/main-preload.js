@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('zonemate', {
   // 현재 집중 상태 스냅샷 1회 조회
   getState: () => ipcRenderer.invoke('get-focus-state'),
 
+  // 앱 버전(package.json 기준) — 업데이트가 실제로 적용됐는지 화면에서 확인용
+  getVersion: () => ipcRenderer.invoke('get-app-version'),
+
   // 실시간 상태 구독 — 메인 프로세스가 1초마다 보내는 스냅샷을 받는다.
   // 반환값은 구독 해제 함수.
   onState: (callback) => {

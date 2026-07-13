@@ -6,6 +6,7 @@ import NicknamePage from './pages/NicknamePage.jsx';
 import PlannerPage from './pages/PlannerPage.jsx';
 import TodayPage from './pages/TodayPage.jsx';
 import DeadlinesPage from './pages/DeadlinesPage.jsx';
+import VersionBadge from './components/VersionBadge.jsx';
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="deadlines" element={<DeadlinesPage />} />
           </Route>
         </Routes>
+        <VersionBadge />
       </BrowserRouter>
     </AuthProvider>
   );

@@ -49,6 +49,12 @@ body {
 }
 .theme-toggle:hover { border-color: var(--signal-dim); color: var(--signal); box-shadow: var(--shadow-sm); }
 
+.version-badge {
+  position: fixed; left: 10px; bottom: 8px; z-index: 5;
+  font-size: 11px; color: var(--text-2); opacity: .55;
+  pointer-events: none; user-select: none;
+}
+
 /* ---- page nav (오늘/마감·캘린더 탭) ---- */
 .page-nav { display: flex; gap: 4px; margin-bottom: 32px; }
 .page-nav-link {

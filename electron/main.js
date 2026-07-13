@@ -1241,6 +1241,7 @@ ipcMain.on('cancel-break-picker', () => {
 ipcMain.on('stop-focus-session', () => stopFocusSession());
 ipcMain.on('resume-focus', () => endBreak('manual'));
 ipcMain.handle('get-focus-state', () => buildFocusSnapshot());
+ipcMain.handle('get-app-version', () => app.getVersion());
 
 app.whenReady().then(async () => {
   createTray();
