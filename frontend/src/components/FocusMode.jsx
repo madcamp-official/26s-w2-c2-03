@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CatFace from './CatFace.jsx';
 
 const BREAK_PRESETS = [5, 10, 15, 30];
 
@@ -83,6 +84,7 @@ export default function FocusMode({ state, now, controls }) {
       ? '집중에서 벗어남'
       : '집중 중';
   const statusTone = onBreak ? 'break' : drifting ? 'drift' : 'focus';
+  const catFill = `var(--cat-${statusTone})`;
 
   return (
     <div className={`focus-mode tone-${statusTone}`}>
@@ -92,9 +94,13 @@ export default function FocusMode({ state, now, controls }) {
           {statusText}
         </div>
 
+        <div className="focus-mascot">
+          <CatFace className="mascot-idle" fill={catFill} />
+        </div>
+
         {state.taskTitle && (
           <div className="focus-current-task">
-            <span className="focus-current-task-kicker mono">지금 하는 일</span>
+            <span className="focus-current-task-kicker">지금 하는 일</span>
             <span className="focus-current-task-title">{state.taskTitle}</span>
           </div>
         )}
