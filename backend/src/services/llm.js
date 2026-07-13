@@ -17,12 +17,12 @@ const PAGE_PRODUCTIVITY_SCHEMA = {
   required: ['classification'],
 };
 
-export async function classifyPageProductivity({ url, title, taskTitle }) {
+export async function classifyPageProductivity({windowTitle, taskTitle }) {
   const response = await genAI.models.generateContent({
     model: MODEL,
-    contents: `Current task: ${taskTitle}\nPage title: ${title || '(none)'}\nPage URL: ${url}`,
+    contents: `Current task: ${taskTitle}\nActive window title: ${windowTitle || '(none)'}\n`,
     config: {
-      systemInstruction: 'Classify whether the current web page is directly useful for completing the current task. Use related only for a clear direct connection, unrelated for a clear lack of connection, and uncertain when the title and URL are insufficient.',
+      systemInstruction: 'Classify whether the current web page is directly useful for completing the current task. Use the active window title as available evidence. Use related only for a clear direct connection, unrelated for a clear lack of connection, and uncertain when the available evidence is insufficient.',
       responseMimeType: 'application/json',
       responseSchema: PAGE_PRODUCTIVITY_SCHEMA,
       maxOutputTokens: 60,

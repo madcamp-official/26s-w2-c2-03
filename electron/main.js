@@ -251,6 +251,11 @@ function showFocusAlert(alert) {
       nodeIntegration: false,
     },
   });
+  // 활성 창 제목만으로 분류한 알림은 다음 poll에서 즉시 닫히지 않도록
+  // 출처와 표시 시작 시각을 창에 보관한다.
+  alertWindow.zonemateAlertType = alert.type || null;
+  alertWindow.zonemateAlertSource = alert.source || null;
+  alertWindow.zonemateAlertShownAt = Date.now();
 
   // screen-saver 레벨 + 모든 워크스페이스(스페이스/전체화면 포함)에서 보이도록
   // 해서, 어떤 앱을 쓰고 있든 그 위에 계속 알림이 떠 있게 한다.
@@ -322,6 +327,8 @@ function activateFocusApps() {
 const DRIFT_ALERT_MS = 6 * 1000;
 const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
+// URL 없이 windowTitle로 판단한 "현재 집중중인가요?" 알림의 최소 표시 시간.
+const WINDOW_TITLE_ALERT_VISIBLE_MS = 15 * 1000;
 const BROADCAST_INTERVAL_MS = 1000;
 // ---- 집중력 게이지 튜닝 포인트 ----
 // 게이지(0~100)는 활성 창이 아니라 키보드/마우스 활동으로 움직인다.
@@ -414,7 +421,7 @@ const focusSession = {
   classifyingPage: false,
 };
 
-async function classifyCurrentBrowserPage() {
+async function classifyCurrentBrowserPage(windowTitle = null) {
   if (focusSession.status !== 'focusing' || !focusSession.taskTitle || focusSession.classifyingPage || alertWindow) return;
 
   const sessionId = focusSession.id;
@@ -428,15 +435,17 @@ async function classifyCurrentBrowserPage() {
       sessions.find((session) => session.clientId === 'local-device' && session.latestBrowserTab)
       || sessions.find((session) => session.latestBrowserTab)
     )?.latestBrowserTab;
-    if (!tab?.url || !/^https?:/i.test(tab.url)) return;
+    const url = tab?.url && /^https?:/i.test(tab.url) ? tab.url : null;
+    const title = tab?.title || null;
+    if (!url && !title && !windowTitle) return;
 
-    const signature = `${taskTitle}\n${tab.url}\n${tab.title || ''}`;
+    const signature = `${taskTitle}\n${url || ''}\n${title || ''}\n${windowTitle || ''}`;
     if (signature === focusSession.lastPageSignature) return;
 
     const response = await fetch(`${BACKEND_ORIGIN}/api/metrics/classify-page`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: tab.url, title: tab.title, taskTitle }),
+      body: JSON.stringify({ url, title, windowTitle, taskTitle }),
     });
     if (!response.ok) return;
     const { classification } = await response.json();
@@ -451,6 +460,7 @@ async function classifyCurrentBrowserPage() {
 
     showFocusAlert({
       type: 'focus_confirm',
+      source: url ? 'url' : 'windowTitle',
       title: '현재 집중중인가요?',
       message: classification === 'unrelated'
         ? '현재 페이지가 진행 중인 작업과 직접 관련 없어 보여요.'
@@ -881,7 +891,7 @@ async function pollFocus() {
     const now = Date.now();
 
     if (activeApp && /chrome|edge|firefox|safari|brave|opera|vivaldi|arc/i.test(activeApp.name)) {
-      void classifyCurrentBrowserPage();
+      void classifyCurrentBrowserPage(info?.title || null);
     }
 
     if (onFocusApp) {
@@ -920,7 +930,12 @@ async function pollFocus() {
       focusSession.lastFocusApp = activeApp;
       focusSession.driftStartedAt = null;
       focusSession.driftAppName = null;
-      if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
+      if (alertWindow && !alertWindow.isDestroyed()) {
+        const isProtectedWindowTitleAlert = alertWindow.zonemateAlertType === 'focus_confirm'
+          && alertWindow.zonemateAlertSource === 'windowTitle'
+          && now - alertWindow.zonemateAlertShownAt < WINDOW_TITLE_ALERT_VISIBLE_MS;
+        if (!isProtectedWindowTitleAlert) alertWindow.close();
+      }
       return;
     }
 

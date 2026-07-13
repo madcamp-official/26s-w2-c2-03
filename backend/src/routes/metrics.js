@@ -10,13 +10,13 @@ router.get('/focus-state', (req, res) => {
 });
 
 router.post('/classify-page', async (req, res) => {
-  const { url, title, taskTitle } = req.body || {};
-  if (!url || !taskTitle) {
-    return res.status(400).json({ error: 'url and taskTitle are required' });
+  const { url, title, windowTitle, taskTitle } = req.body || {};
+  if (!taskTitle || (!url && !title && !windowTitle)) {
+    return res.status(400).json({ error: 'taskTitle and at least one page signal are required' });
   }
 
   try {
-    const classification = await classifyPageProductivity({ url, title, taskTitle });
+    const classification = await classifyPageProductivity({ url, title, windowTitle, taskTitle });
     return res.json({ classification });
   } catch (err) {
     console.error('[page-classification]', err.message);
