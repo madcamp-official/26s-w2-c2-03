@@ -9,6 +9,46 @@ function makeId() {
   return `item-${idCounter++}-${Date.now()}`;
 }
 
+// "HH:MM" <-> 분 변환 유틸 (시작 시간 cascade에 사용)
+function parseTimeToMinutes(time) {
+  if (typeof time !== 'string') return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+function minutesToTime(total) {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, total));
+  const h = Math.floor(clamped / 60);
+  const min = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+// 한 항목의 시작 시간을 바꾸면, 바뀐 만큼(delta) 그 뒤 항목들의 시작 시간도
+// 같이 밀어준다(뒤로/앞으로). 시작 시간이 없는 뒤 항목은 건드리지 않는다.
+function cascadeStartTime(items, id, newStartTime) {
+  const idx = items.findIndex((it) => it.id === id);
+  if (idx < 0) return items;
+  const oldStart = parseTimeToMinutes(items[idx].startTime);
+  const newStart = parseTimeToMinutes(newStartTime);
+  // 지우기(빈 값)거나 이전 시작 시간이 없으면 델타 계산 불가 → 해당 항목만 변경
+  if (newStart === null || oldStart === null) {
+    return items.map((it) => (it.id === id ? { ...it, startTime: newStartTime || undefined } : it));
+  }
+  const delta = newStart - oldStart;
+  return items.map((it, i) => {
+    if (i === idx) return { ...it, startTime: newStartTime };
+    if (i > idx && delta !== 0) {
+      const t = parseTimeToMinutes(it.startTime);
+      if (t === null) return it;
+      return { ...it, startTime: minutesToTime(t + delta) };
+    }
+    return it;
+  });
+}
+
 const INITIAL_BOT_MESSAGE = '오늘 할 일을 편하게 알려주세요. 짧게 적어도 괜찮아요, 필요하면 제가 한두 가지만 더 물어볼게요.';
 
 export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEndTimeChange }) {
@@ -74,6 +114,11 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
   }
 
   function updateItem(id, patch) {
+    // 시작 시간 변경은 뒤 항목들도 같이 미루도록 cascade 처리한다.
+    if (Object.prototype.hasOwnProperty.call(patch, 'startTime')) {
+      onItemsChange((prev) => cascadeStartTime(prev, id, patch.startTime));
+      return;
+    }
     onItemsChange((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
 

@@ -102,11 +102,15 @@ export async function generateDailyPlanChat({ messages, forceFinalize }) {
     parts: [{ text: m.text }],
   }));
 
+  // 챗봇이 "지금 몇 시인지"를 모르면 이미 지난 시각부터 일정을 짜버린다.
+  // 매 요청마다 현재 로컬 시각을 주입하고, 모든 startTime을 현재 이후로만 잡게 한다.
+  const nowNote = `\n\n[현재 시각] ${toNaiveLocalString(new Date())} — 지금 이 시각 기준입니다. 모든 항목의 startTime은 반드시 현재 시각 이후로만 잡으세요. 이미 지난 시각으로는 절대 배치하지 마세요. 사용자가 "지금부터"·"이따가"처럼 말하면 현재 시각을 시작점으로 삼으세요.`;
+
   const response = await genAI.models.generateContent({
     model: MODEL,
     contents,
     config: {
-      systemInstruction: PLAN_CHAT_SYSTEM_PROMPT + (forceFinalize ? FORCE_FINALIZE_NOTE : ''),
+      systemInstruction: PLAN_CHAT_SYSTEM_PROMPT + nowNote + (forceFinalize ? FORCE_FINALIZE_NOTE : ''),
       responseMimeType: 'application/json',
       responseSchema: PLAN_CHAT_SCHEMA,
       maxOutputTokens: 1200,
