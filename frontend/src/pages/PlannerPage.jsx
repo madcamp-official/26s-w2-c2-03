@@ -6,6 +6,7 @@ import { toDateKey } from '../utils/calendarGrid.js';
 import { useFocusSession } from '../hooks/useFocusSession.js';
 import FocusMode from '../components/FocusMode.jsx';
 import FocusStartModal from '../components/FocusStartModal.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 let eventCounter = 1;
 function makeEventId() {
@@ -181,6 +182,7 @@ export default function PlannerPage() {
               </button>
             )}
             <span className="mono">{user?.nickname}님</span>
+            <ThemeToggle />
             <button type="button" className="btn-ghost" onClick={logout}>로그아웃</button>
           </div>
         </header>

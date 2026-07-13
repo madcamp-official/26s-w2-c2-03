@@ -64,7 +64,7 @@ export default function DayWheel({ items, dayEndTime }) {
         <div className="timetable-track timetable-axis-track">
           {ticks.map((t) => (
             <span key={t} className="timetable-tick" style={{ left: pct(t) }}>
-              <span className="timetable-tick-label mono">{minutesToTime(t)}</span>
+              <span className="timetable-tick-label num">{minutesToTime(t)}</span>
             </span>
           ))}
           {showDayEnd && (
@@ -82,7 +82,7 @@ export default function DayWheel({ items, dayEndTime }) {
           <div key={it.id} className={`timetable-row${it.done ? ' is-done' : ''}`}>
             <div className="timetable-label">
               <span className="timetable-label-title" title={it.title}>{it.title}</span>
-              <span className="timetable-label-time mono">{it.startTime}–{minutesToTime(it.end)}</span>
+              <span className="timetable-label-time num">{it.startTime}–{minutesToTime(it.end)}</span>
             </div>
             <div className="timetable-track">
               {showDayEnd && <span className="timetable-row-endline" style={{ left: pct(dayEndMin) }} />}

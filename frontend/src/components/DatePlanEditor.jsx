@@ -168,7 +168,7 @@ export default function DatePlanEditor({
                 />
                 <input
                   type="time"
-                  className="date-task-time mono"
+                  className="date-task-time num"
                   value={t.startTime || ''}
                   onChange={(e) => updateTask(t.id, { startTime: e.target.value || undefined })}
                   title="시작 시간"
@@ -176,7 +176,7 @@ export default function DatePlanEditor({
                 <input
                   type="number"
                   min="1"
-                  className="date-task-min mono"
+                  className="date-task-min num"
                   value={t.targetMinutes}
                   onChange={(e) => updateTask(t.id, { targetMinutes: Math.max(1, Number(e.target.value) || 1) })}
                   title="소요(분)"
@@ -215,7 +215,7 @@ export default function DatePlanEditor({
                     />
                     <input
                       type="datetime-local"
-                      className="date-event-time mono"
+                      className="date-event-time num"
                       value={toLocalInputValue(new Date(ev.date))}
                       onChange={(e) => onUpdateEvent(ev.id, { date: e.target.value })}
                     />
@@ -234,7 +234,7 @@ export default function DatePlanEditor({
                   <div key={s.sessionId} className="focus-log-card">
                     <div className="focus-log-head">
                       <span className="focus-log-title">{s.taskTitle || '집중 세션'}</span>
-                      <span className="mono focus-log-time">
+                      <span className="num focus-log-time">
                         {formatClock(s.startedAt)}{s.endedAt ? `–${formatClock(s.endedAt)}` : ' · 진행 중'}
                       </span>
                     </div>
@@ -243,10 +243,10 @@ export default function DatePlanEditor({
                     )}
                     {s.completed ? (
                       <div className="focus-log-stats">
-                        <span className="focus-log-stat tone-focus">집중 {formatDur(s.totalFocusMs)}</span>
-                        <span className="focus-log-stat tone-break">휴식 {formatDur(s.totalBreakMs)}</span>
-                        <span className="focus-log-stat tone-drift">딴짓 {formatDur(s.totalDriftMs)}</span>
-                        <span className="focus-log-stat">벗어남 {s.driftCount}회</span>
+                        <span className="focus-log-stat tone-focus num">집중 {formatDur(s.totalFocusMs)}</span>
+                        <span className="focus-log-stat tone-break num">휴식 {formatDur(s.totalBreakMs)}</span>
+                        <span className="focus-log-stat tone-drift num">딴짓 {formatDur(s.totalDriftMs)}</span>
+                        <span className="focus-log-stat num">벗어남 {s.driftCount}회</span>
                       </div>
                     ) : (
                       <div className="focus-log-stats"><span className="focus-log-stat">아직 끝나지 않은 세션이에요</span></div>

@@ -291,7 +291,7 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
             <input
               id="day-end-time"
               type="time"
-              className="day-end-input mono"
+              className="day-end-input num"
               value={dayEndTime || ''}
               onChange={(e) => onDayEndTimeChange(e.target.value || null)}
             />

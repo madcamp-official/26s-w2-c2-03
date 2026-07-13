@@ -1,60 +1,79 @@
 :root {
   color-scheme: light;
-  --ground: #F5F1E8;
+  --ground: #FFF8EC;
   --surface: #FFFFFF;
-  --surface-2: #EDE6D6;
-  --line: #DCD2BC;
-  --signal: #B5660F;
-  --signal-dim: #C9985E;
+  --surface-2: #F5E9CE;
+  --line: #F1E1C2;
+  --signal: #E08A1E;
+  --signal-dim: #D9A567;
   --signal-ink: #FFFFFF;
-  --noise: #5B6472;
-  --urgent: #B23A2C;
-  --text-1: #241D14;
-  --text-2: #6B5D46;
+  --noise: #7C9184;
+  --noise-ink: #FFFFFF;
+  --urgent: #D8503A;
+  --urgent-ink: #FFFFFF;
+  --text-1: #3A2A15;
+  --text-2: #A4886B;
   --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace;
+  /* 숫자(게이지·타이머·시간·통계) 전용 라운드 폰트 — 한글/라벨은 계속 font-sans를 쓴다.
+     @font-face의 unicode-range가 숫자·콜론·마침표·퍼센트만 잡아서, 이 폰트를
+     한글과 섞인 요소에 적용해도 한글 글자는 자동으로 font-sans로 폴백된다. */
+  --font-num: "FredokaNum", var(--font-sans);
   /* 작은 컨트롤용(3px)은 유지하되, 카드/패널은 더 부드러운 라운드로 고급스럽게 */
   --radius: 3px;
   --radius-md: 9px;
   --radius-lg: 14px;
   /* 평평한 테두리 대신 은은한 그림자로 깊이를 준다(라이트 기본값) */
-  --shadow-sm: 0 1px 2px rgba(36, 29, 20, .05), 0 1px 3px rgba(36, 29, 20, .06);
-  --shadow-md: 0 2px 4px rgba(36, 29, 20, .04), 0 6px 18px rgba(36, 29, 20, .07);
-  --shadow-lg: 0 8px 24px rgba(36, 29, 20, .10), 0 18px 48px rgba(36, 29, 20, .12);
-  --ring-focus: 0 0 0 3px rgba(181, 102, 15, .18);
+  --shadow-sm: 0 1px 2px rgba(58, 42, 21, .05), 0 1px 3px rgba(58, 42, 21, .06);
+  --shadow-md: 0 2px 4px rgba(58, 42, 21, .04), 0 6px 18px rgba(58, 42, 21, .07);
+  --shadow-lg: 0 8px 24px rgba(58, 42, 21, .10), 0 18px 48px rgba(58, 42, 21, .12);
+  --ring-focus: 0 0 0 3px rgba(224, 138, 30, .18);
+}
+
+@font-face {
+  font-family: "FredokaNum";
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url("./fonts/fredoka-num-600.woff2") format("woff2");
+  unicode-range: U+0020, U+0025, U+002E, U+003A, U+0030-0039;
 }
 
 /* 기본값은 항상 라이트모드 — OS 다크모드 설정과 무관하게 고정.
-   다크모드는 나중에 명시적 토글(data-theme="dark")을 추가하면 사용 가능. */
+   상단바의 다크/라이트 토글(useTheme)로만 data-theme="dark"가 켜진다. */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --ground: #14110D;
-  --surface: #1F1A14;
-  --surface-2: #2A231A;
-  --line: #3A3024;
-  --signal: #E8A33D;
-  --signal-dim: #9C7A46;
-  --signal-ink: #14110D;
-  --noise: #7C8798;
-  --urgent: #E0725F;
-  --text-1: #F2E9DA;
-  --text-2: #B8A98D;
+  --ground: #1B130A;
+  --surface: #241A0E;
+  --surface-2: #2E2113;
+  --line: #3B2A16;
+  --signal: #F0A03D;
+  --signal-dim: #B98A4C;
+  --signal-ink: #241A0E;
+  --noise: #93AC9C;
+  --noise-ink: #14110D;
+  --urgent: #F0846A;
+  --urgent-ink: #14110D;
+  --text-1: #F5E9D6;
+  --text-2: #B39A78;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 1px 3px rgba(0, 0, 0, .4);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .45);
   --shadow-lg: 0 10px 30px rgba(0, 0, 0, .5), 0 20px 56px rgba(0, 0, 0, .55);
-  --ring-focus: 0 0 0 3px rgba(232, 163, 61, .22);
+  --ring-focus: 0 0 0 3px rgba(240, 160, 61, .22);
 }
 
 :root[data-theme='light'] {
-  --ground: #F5F1E8;
+  --ground: #FFF8EC;
   --surface: #FFFFFF;
-  --surface-2: #EDE6D6;
-  --line: #DCD2BC;
-  --signal: #B5660F;
-  --signal-dim: #C9985E;
+  --surface-2: #F5E9CE;
+  --line: #F1E1C2;
+  --signal: #E08A1E;
+  --signal-dim: #D9A567;
   --signal-ink: #FFFFFF;
-  --noise: #5B6472;
-  --urgent: #B23A2C;
-  --text-1: #241D14;
-  --text-2: #6B5D46;
+  --noise: #7C9184;
+  --noise-ink: #FFFFFF;
+  --urgent: #D8503A;
+  --urgent-ink: #FFFFFF;
+  --text-1: #3A2A15;
+  --text-2: #A4886B;
 }

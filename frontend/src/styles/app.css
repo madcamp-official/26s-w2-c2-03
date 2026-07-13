@@ -10,6 +10,9 @@ body {
 }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* 숫자 전용 라운드 폰트(FredokaNum) — 게이지·타이머·시간·통계처럼 숫자가
+   주인공인 요소에 붙인다. 한글이 섞여 있어도 안전(unicode-range로 숫자만 적용). */
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 .page { min-height: 100%; padding-bottom: 80px; }
 .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; transition: max-width .2s ease; }
@@ -36,6 +39,15 @@ body {
 .wordmark b { color: var(--signal); font-weight: 700; }
 
 .topbar-user { display: flex; align-items: center; gap: 10px; }
+
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md);
+  color: var(--text-2); cursor: pointer;
+  transition: color .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+.theme-toggle:hover { border-color: var(--signal-dim); color: var(--signal); box-shadow: var(--shadow-sm); }
 
 /* ---- page nav (오늘/마감·캘린더 탭) ---- */
 .page-nav { display: flex; gap: 4px; margin-bottom: 32px; }
@@ -176,8 +188,8 @@ textarea:focus, input:focus {
   font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .03em;
   padding: 3px 8px; border-radius: 2px; white-space: nowrap; text-transform: uppercase;
 }
-.tag-noise { background: var(--noise); color: #fff; }
-.tag-urgent { background: var(--urgent); color: #fff; }
+.tag-noise { background: var(--noise); color: var(--noise-ink); }
+.tag-urgent { background: var(--urgent); color: var(--urgent-ink); }
 .tag-signal { background: var(--signal); color: var(--signal-ink); }
 
 /* ---- 오늘의 계획 챗봇 (John) ---- */

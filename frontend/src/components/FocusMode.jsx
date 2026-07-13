@@ -40,7 +40,7 @@ function GaugeRing({ value }) {
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
         style={{ transition: 'stroke-dasharray 0.6s ease, stroke 0.6s ease' }}
       />
-      <text x="50%" y="47%" textAnchor="middle" className="gauge-value">{value}</text>
+      <text x="50%" y="47%" textAnchor="middle" className="gauge-value num">{value}</text>
       <text x="50%" y="62%" textAnchor="middle" className="gauge-label">집중력</text>
     </svg>
   );
@@ -49,7 +49,7 @@ function GaugeRing({ value }) {
 function Stat({ label, value, tone }) {
   return (
     <div className={`focus-stat${tone ? ` tone-${tone}` : ''}`}>
-      <div className="focus-stat-value mono">{value}</div>
+      <div className="focus-stat-value num">{value}</div>
       <div className="focus-stat-label">{label}</div>
     </div>
   );
@@ -104,17 +104,17 @@ export default function FocusMode({ state, now, controls }) {
         <div className="focus-primary">
           {onBreak ? (
             <>
-              <div className="focus-primary-value mono">{formatDuration(breakRemainingMs)}</div>
+              <div className="focus-primary-value num">{formatDuration(breakRemainingMs)}</div>
               <div className="focus-primary-label">휴식 남은 시간</div>
             </>
           ) : drifting ? (
             <>
-              <div className="focus-primary-value mono tone-drift">{formatDuration(driftMs)}</div>
+              <div className="focus-primary-value num tone-drift">{formatDuration(driftMs)}</div>
               <div className="focus-primary-label">{`"${state.driftAppName || '다른 곳'}"에서 벗어나 있는 시간`}</div>
             </>
           ) : (
             <>
-              <div className="focus-primary-value mono">{formatDuration(focusStreakMs)}</div>
+              <div className="focus-primary-value num">{formatDuration(focusStreakMs)}</div>
               <div className="focus-primary-label">지금 이어서 집중한 시간</div>
             </>
           )}

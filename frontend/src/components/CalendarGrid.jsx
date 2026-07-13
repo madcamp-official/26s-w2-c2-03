@@ -61,7 +61,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove, tasks, setTas
 
       <div className="calendar-nav">
         <button type="button" className="btn-ghost" onClick={() => setMonthDate((d) => addMonths(d, -1))} aria-label="이전 달">‹</button>
-        <span className="calendar-month-label mono">
+        <span className="calendar-month-label num">
           {monthDate.getFullYear()}. {String(monthDate.getMonth() + 1).padStart(2, '0')}
         </span>
         <button type="button" className="btn-ghost" onClick={() => setMonthDate((d) => addMonths(d, 1))} aria-label="다음 달">›</button>
@@ -99,7 +99,7 @@ export default function CalendarGrid({ events, onUpdate, onRemove, tasks, setTas
               onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
               onDrop={(e) => handleDrop(e, day)}
             >
-              <span className={`calendar-cell-date mono${today ? ' is-today' : ''}`}>
+              <span className={`calendar-cell-date num${today ? ' is-today' : ''}`}>
                 {day.getDate()}
               </span>
               <div className="calendar-cell-events">
