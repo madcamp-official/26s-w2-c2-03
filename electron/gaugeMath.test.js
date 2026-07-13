@@ -49,4 +49,14 @@ function run(startGauge, activePattern) {
   assert.strictEqual(s2.idleStreak, 1);
 }
 
+// 6) intensity(입력의 질)가 낮으면 상승폭이 줄고, 하강엔 영향 없다
+{
+  const full = nextGauge({ gauge: 50, activeStreak: 0, idleStreak: 0 }, true, undefined, 1).step;
+  const half = nextGauge({ gauge: 50, activeStreak: 0, idleStreak: 0 }, true, undefined, 0.5).step;
+  assert.ok(half < full && half > 0, 'intensity 0.5면 상승폭이 절반 정도로 줄어야 함');
+  const dropFull = nextGauge({ gauge: 50, activeStreak: 0, idleStreak: 0 }, false, undefined, 1).step;
+  const dropLow = nextGauge({ gauge: 50, activeStreak: 0, idleStreak: 0 }, false, undefined, 0.2).step;
+  assert.strictEqual(dropFull, dropLow, '하강폭은 intensity와 무관');
+}
+
 console.log('gaugeMath.test.js: 모든 검증 통과 ✅');

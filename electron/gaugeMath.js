@@ -24,15 +24,18 @@ function clamp(v, lo, hi) {
  * @param {{gauge:number, activeStreak:number, idleStreak:number}} state
  * @param {boolean} active 이번 tick에 키/마우스 입력이 있었는가
  * @param {typeof GAUGE_MOMENTUM} [cfg]
+ * @param {number} [intensity] 상승폭 배율 0~1 (입력의 "질". 1=기본, 낮을수록 천천히 오름).
+ *   패턴 점수(강도·리듬·밀도)가 있을 때 이걸로 상승 속도를 조절한다. 하강엔 영향 없음.
  * @returns {{gauge:number, activeStreak:number, idleStreak:number, step:number}}
  */
-function nextGauge(state, active, cfg = GAUGE_MOMENTUM) {
+function nextGauge(state, active, cfg = GAUGE_MOMENTUM, intensity = 1) {
   let { gauge, activeStreak, idleStreak } = state;
   let step;
   if (active) {
     idleStreak = 0;
     activeStreak += 1;
-    step = Math.min(cfg.maxUp, cfg.baseUp + cfg.accelUp * (activeStreak - 1));
+    const scale = clamp(intensity, 0, 1);
+    step = scale * Math.min(cfg.maxUp, cfg.baseUp + cfg.accelUp * (activeStreak - 1));
     gauge = clamp(gauge + step, 0, 100);
   } else {
     activeStreak = 0;

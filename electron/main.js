@@ -3,6 +3,7 @@ const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const http = require('node:http');
+const fs = require('node:fs');
 const { nextGauge } = require('./gaugeMath');
 
 // Windows Squirrel 인스톨러 전용 처리. 이 모듈은 패키징 빌드에만 필요하고
@@ -48,6 +49,7 @@ const SMOKE_TEST = process.env.ELECTRON_SMOKE_TEST === '1';
 
 let backendProcess = null;
 let frontendProcess = null;
+let osTrackerProcess = null;
 let mainWindow = null;
 let tray = null;
 
@@ -325,6 +327,11 @@ const BROADCAST_INTERVAL_MS = 1000;
 // 폴링 tick(2초)마다 갱신. 등락 폭(모멘텀 스텝)은 gaugeMath.js의 GAUGE_MOMENTUM에서 조절.
 // (창 분류는 집중/이탈 상태·알림·통계 쪽에서 계속 쓴다.)
 const GAUGE_ACTIVE_IDLE_SEC = 4; // 이 초 미만 유휴면 "활발히 입력 중"으로 본다
+// os-tracker(키/마우스 패턴)를 쓸 때: 이 clientId로 spawn하고 백엔드 focus-state를 폴링한다.
+// lastEventAt이 이 시간 안이면 "신선"으로 보고 패턴 점수로 게이지 상승폭을 조절, 아니면
+// powerMonitor.getSystemIdleTime() 폴백(os-tracker 미설치/권한없음/미실행 시).
+const OS_TRACKER_CLIENT_ID = 'zonemate-desktop';
+const INPUT_FRESH_MS = 10 * 1000;
 // 게이지 기반 알림: 게이지가 이 값 미만으로 아래 시간 이상 지속되면 "손이 멈췄어요" 알림
 const GAUGE_LOW_THRESHOLD = 25;
 const GAUGE_LOW_ALERT_MS = 3 * 60 * 1000;
@@ -389,6 +396,8 @@ const focusSession = {
   activeStreak: 0, // 연속 활동 tick 수(모멘텀 상승 가속용)
   idleStreak: 0,   // 연속 유휴 tick 수(모멘텀 하강 가속용)
   gaugeLowSince: null, // 게이지가 저점 아래로 내려간 시각(null이면 정상)
+  inputScore: 0,   // os-tracker 패턴 점수(0~100, 백엔드 focus-state 폴링 캐시)
+  inputAt: null,   // 그 점수의 마지막 입력 시각(신선도 판단용)
 
   // 선제 알림(웰빙) 스누즈 — 이 시각 전에는 각각 다시 알리지 않는다.
   overfocusSnoozedUntil: 0, // 이번 집중 streak가 새로 시작되면 0으로 리셋
@@ -636,13 +645,72 @@ function openBreakPicker() {
   });
 }
 
-// 집중력 게이지를 키보드/마우스 활동으로 갱신한다. 최근 입력이 있으면(유휴 시간이
-// 짧으면) 올리고, 입력이 끊기면 내린다. 등락 폭은 모멘텀 방식(gaugeMath.nextGauge):
-// 집중(입력)이 이어질수록 상승이 빨라지고, 이탈(공백)이 이어질수록 하강이 점진
-// 가속된다. 창 종류와 무관하게 "지금 손을 움직이고 있는가"만 본다 — 창 기반
-// 판단(집중/이탈)은 아래 pollFocus 본문에서 따로 한다.
+// 집중력 게이지를 키보드/마우스 활동으로 갱신한다. 등락 폭은 모멘텀 방식
+// (gaugeMath.nextGauge): 집중(입력)이 이어질수록 상승이 빨라지고, 이탈(공백)이
+// 이어질수록 하강이 점진 가속된다.
+//   - os-tracker 패턴 점수가 신선하면: 활동 여부 + "질"(intensity)을 그 점수로 판단
+//     — 규칙적/활발한 타이핑은 빠르게, 산발적 입력은 천천히 오름.
+//   - 없으면(미실행/권한없음): powerMonitor.getSystemIdleTime() 이진 판정으로 폴백.
+// 창 종류와 무관하게 "지금 손을 움직이고 있는가"만 본다(창 판단은 pollFocus에서 따로).
+// 백엔드 focus-state를 폴링해 os-tracker 패턴 점수를 캐시한다(게이지 상승 조절용).
+function fetchInputStateOnce() {
+  const req = http.get(`${BACKEND_ORIGIN}/api/metrics/focus-state`, (res) => {
+    let body = '';
+    res.on('data', (c) => { body += c; });
+    res.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const s = (data.sessions || []).find((x) => x.clientId === OS_TRACKER_CLIENT_ID);
+        if (s) {
+          focusSession.inputScore = typeof s.inputScore === 'number' ? s.inputScore : 0;
+          focusSession.inputAt = s.lastEventAt || null;
+        }
+      } catch { /* 파싱 실패는 무시 — 폴백 로직이 처리 */ }
+    });
+  });
+  req.on('error', () => {}); // 백엔드 응답 없으면 getSystemIdleTime 폴백
+  req.setTimeout(1500, () => req.destroy());
+}
+
+// os-tracker(전역 키/마우스 캡처)를 자식 프로세스로 띄운다. 패키지 빌드에선
+// 네이티브 모듈 번들 검증이 필요해 아직 dev(비패키지)에서만 실행 — 실패
+// (미설치/권한없음)해도 게이지는 getSystemIdleTime 폴백으로 계속 동작한다.
+function startOsTracker() {
+  if (app.isPackaged || osTrackerProcess) return;
+  const entry = path.join(ROOT, 'os-tracker', 'tracker.js');
+  if (!fs.existsSync(entry)) return;
+  try {
+    osTrackerProcess = spawn('node', [entry], {
+      cwd: path.join(ROOT, 'os-tracker'),
+      stdio: 'inherit',
+      env: { ...process.env, METRICS_CLIENT_ID: OS_TRACKER_CLIENT_ID },
+    });
+    osTrackerProcess.on('exit', () => { osTrackerProcess = null; });
+    osTrackerProcess.on('error', (err) => {
+      console.error('[electron] os-tracker 시작 실패(게이지는 폴백):', err.message);
+      osTrackerProcess = null;
+    });
+  } catch (err) {
+    console.error('[electron] os-tracker spawn 예외:', err.message);
+  }
+}
+
+function stopOsTracker() {
+  if (osTrackerProcess) { osTrackerProcess.kill(); osTrackerProcess = null; }
+}
+
 function updateGaugeFromActivity() {
-  const active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
+  const now = Date.now();
+  const fresh = focusSession.inputAt != null && now - focusSession.inputAt < INPUT_FRESH_MS;
+  let active;
+  let intensity = 1;
+  if (fresh) {
+    active = focusSession.inputScore > 0;
+    // 활동이 있으면 최소 0.2는 보장(아주 산발적이어도 조금은 오르게), 최대 1.
+    intensity = active ? Math.max(0.2, focusSession.inputScore / 100) : 1;
+  } else {
+    active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
+  }
   const next = nextGauge(
     {
       gauge: focusSession.gauge,
@@ -650,6 +718,8 @@ function updateGaugeFromActivity() {
       idleStreak: focusSession.idleStreak,
     },
     active,
+    undefined,
+    intensity,
   );
   focusSession.gauge = next.gauge;
   focusSession.activeStreak = next.activeStreak;
@@ -665,6 +735,7 @@ function updateGaugeFromActivity() {
 
 async function pollFocus() {
   if (focusSession.status !== 'focusing') return;
+  fetchInputStateOnce();
   updateGaugeFromActivity();
   try {
     // Zonemate 자기 자신은 집중 대상에서 항상 제외한다 — 집중 중 대시보드나
@@ -781,8 +852,11 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.activeStreak = 0;
   focusSession.idleStreak = 0;
   focusSession.gaugeLowSince = null;
+  focusSession.inputScore = 0;
+  focusSession.inputAt = null;
   focusSession.underfocusSnoozedUntil = 0;
   focusSession.gaugeAlertSnoozedUntil = 0;
+  startOsTracker(); // 집중 세션 동안만 키/마우스 패턴 수집(dev)
 
   logFocusEvent('session_start', {
     focusApps: focusApps.map((a) => a.name),
@@ -809,6 +883,8 @@ function stopFocusSession() {
     totalBreakMs: focusSession.totalBreakMs,
     driftCount: focusSession.driftCount,
   });
+
+  stopOsTracker(); // 집중 세션 끝나면 키/마우스 수집도 중단
 
   focusSession.status = 'idle';
   focusSession.id = null;
@@ -1074,4 +1150,5 @@ app.on('before-quit', () => {
   stopFocusSession();
   if (backendProcess) backendProcess.kill();
   if (frontendProcess) frontendProcess.kill();
+  stopOsTracker();
 });
