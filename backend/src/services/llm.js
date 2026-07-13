@@ -6,6 +6,32 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // 안정적으로 응답하면서, 우리 스키마 기준 품질도 문제없음을 확인함
 const MODEL = 'gemini-flash-lite-latest';
 
+const PAGE_PRODUCTIVITY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    classification: {
+      type: Type.STRING,
+      enum: ['related', 'unrelated', 'uncertain'],
+    },
+  },
+  required: ['classification'],
+};
+
+export async function classifyPageProductivity({ url, title, taskTitle }) {
+  const response = await genAI.models.generateContent({
+    model: MODEL,
+    contents: `Current task: ${taskTitle}\nPage title: ${title || '(none)'}\nPage URL: ${url}`,
+    config: {
+      systemInstruction: 'Classify whether the current web page is directly useful for completing the current task. Use related only for a clear direct connection, unrelated for a clear lack of connection, and uncertain when the title and URL are insufficient.',
+      responseMimeType: 'application/json',
+      responseSchema: PAGE_PRODUCTIVITY_SCHEMA,
+      maxOutputTokens: 60,
+    },
+  });
+
+  return JSON.parse(response.text).classification;
+}
+
 // ---- 오늘 할 일 → 휴식 포함 계획 (대화형) ----
 // 사용자가 단어 위주로 짧게 적으면 LLM이 과도하게 확대해석해서 엉뚱한 세부
 // 작업을 지어내는 문제가 있었다. 한 번에 계획을 뽑지 않고, 정보가 부족하면

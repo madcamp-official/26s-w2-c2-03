@@ -385,7 +385,62 @@ const focusSession = {
   // 선제 알림(웰빙) 스누즈 — 이 시각 전에는 각각 다시 알리지 않는다.
   overfocusSnoozedUntil: 0, // 이번 집중 streak가 새로 시작되면 0으로 리셋
   underfocusSnoozedUntil: 0,
+  lastPageSignature: null,
+  classifyingPage: false,
 };
+
+async function classifyCurrentBrowserPage() {
+  if (focusSession.status !== 'focusing' || !focusSession.taskTitle || focusSession.classifyingPage || alertWindow) return;
+
+  const sessionId = focusSession.id;
+  const taskTitle = focusSession.taskTitle;
+  focusSession.classifyingPage = true;
+  try {
+    const stateResponse = await fetch(`${BACKEND_ORIGIN}/api/metrics/focus-state`);
+    if (!stateResponse.ok) return;
+    const { sessions = [] } = await stateResponse.json();
+    const tab = (
+      sessions.find((session) => session.clientId === 'local-device' && session.latestBrowserTab)
+      || sessions.find((session) => session.latestBrowserTab)
+    )?.latestBrowserTab;
+    if (!tab?.url || !/^https?:/i.test(tab.url)) return;
+
+    const signature = `${taskTitle}\n${tab.url}\n${tab.title || ''}`;
+    if (signature === focusSession.lastPageSignature) return;
+
+    const response = await fetch(`${BACKEND_ORIGIN}/api/metrics/classify-page`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: tab.url, title: tab.title, taskTitle }),
+    });
+    if (!response.ok) return;
+    const { classification } = await response.json();
+    if (
+      focusSession.status !== 'focusing'
+      || focusSession.id !== sessionId
+      || focusSession.taskTitle !== taskTitle
+      || alertWindow
+    ) return;
+    focusSession.lastPageSignature = signature;
+    if (classification === 'related') return;
+
+    showFocusAlert({
+      type: 'focus_confirm',
+      title: '현재 집중중인가요?',
+      message: classification === 'unrelated'
+        ? '현재 페이지가 진행 중인 작업과 직접 관련 없어 보여요.'
+        : '현재 페이지와 진행 중인 작업의 관련성을 판단하기 어려워요.',
+      actions: [
+        { id: 'page_focus_yes', label: '네', primary: true },
+        { id: 'page_focus_no', label: '아니요' },
+      ],
+    });
+  } catch (err) {
+    console.error('[electron] page classification failed:', err.message);
+  } finally {
+    focusSession.classifyingPage = false;
+  }
+}
 
 // 활성/열린 창 정보에서 플랫폼에 상관없이 앱을 식별할 키를 뽑아낸다.
 // macOS는 bundleId가 안정적인 식별자지만, Windows는 그게 없어서 실행 파일
@@ -637,6 +692,10 @@ async function pollFocus() {
     const onFocusApp = activeApp && focusSession.focusAppIds.has(activeApp.appId);
     const now = Date.now();
 
+    if (activeApp && /chrome|edge|firefox|safari|brave|opera|vivaldi|arc/i.test(activeApp.name)) {
+      void classifyCurrentBrowserPage();
+    }
+
     if (onFocusApp) {
       if (focusSession.ignoredCurrentDrift) {
         // 무시하기를 누른 이탈에서 돌아온 경우엔 자동으로 이탈 종료 처리하지
@@ -732,6 +791,7 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.driftCount = 0;
   focusSession.gauge = 50;
   focusSession.underfocusSnoozedUntil = 0;
+  focusSession.lastPageSignature = null;
 
   logFocusEvent('session_start', {
     focusApps: focusApps.map((a) => a.name),
@@ -893,6 +953,11 @@ ipcMain.on('alert-action', (event, action) => {
   logFocusEvent('alert_action', action);
 
   const win = BrowserWindow.fromWebContents(event.sender);
+
+  if (action.actionId === 'page_focus_yes' || action.actionId === 'page_focus_no') {
+    if (win && !win.isDestroyed()) win.close();
+    return;
+  }
 
   if (action.actionId === 'return') {
     // 알림 창을 먼저 닫고(닫으면 macOS가 직전 활성 앱=딴짓하던 앱으로 포커스를

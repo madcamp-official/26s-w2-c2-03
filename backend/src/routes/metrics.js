@@ -1,11 +1,27 @@
 import express from 'express';
 import { createFocusMetricsAdapter } from '../services/focusMetricsAdapter.js';
+import { classifyPageProductivity } from '../services/llm.js';
 
 const router = express.Router();
 const focusAdapter = createFocusMetricsAdapter();
 
 router.get('/focus-state', (req, res) => {
   res.json({ sessions: focusAdapter.getStates() });
+});
+
+router.post('/classify-page', async (req, res) => {
+  const { url, title, taskTitle } = req.body || {};
+  if (!url || !taskTitle) {
+    return res.status(400).json({ error: 'url and taskTitle are required' });
+  }
+
+  try {
+    const classification = await classifyPageProductivity({ url, title, taskTitle });
+    return res.json({ classification });
+  } catch (err) {
+    console.error('[page-classification]', err.message);
+    return res.status(502).json({ error: 'page classification failed' });
+  }
 });
 
 /**
