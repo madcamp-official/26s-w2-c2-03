@@ -114,6 +114,23 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  -- 실시간 집중 세션 미러링: PC나 폰 중 어느 한쪽이 집중을 시작하면 여기에
+  -- 자기 상태를 주기적으로 써두고, 다른 기기는 이걸 폴링해서 "지금 집중
+  -- 중이에요"를 따라 보여준다. 계정당 하나(동시에 여러 기기에서 서로 다른
+  -- 세션을 만들지 않는다 — "같은 사람"이 지금 뭘 하고 있는지 하나로 본다).
+  CREATE TABLE IF NOT EXISTS focus_live_sessions (
+    user_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL, -- 'idle' | 'focusing' | 'onBreak'
+    task_title TEXT,
+    target_minutes INTEGER,
+    source TEXT, -- 'desktop' | 'mobile' — 어느 쪽이 이 세션을 시작했는지
+    gauge INTEGER,
+    current_state TEXT, -- 'focus' | 'drift' | 'break' | 'self' | 'idle'
+    started_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_planner_tasks_user_order
     ON planner_tasks(user_id, sort_order);
 
@@ -149,5 +166,19 @@ try {
 } catch {
   // 컬럼이 이미 존재하는 경우
 }
+
+// focus_events가 원래 계정 없이(기기 clientId만으로) 기록되던 시절의 흔적 —
+// 여러 계정이 같은 서버를 공유하는 지금은 캘린더 집중 로그가 계정 구분 없이
+// 전부 섞여 보이는 버그가 된다. user_id를 추가해서 계정별로 가른다(기존
+// 행은 NULL로 남아 아무 계정에도 안 잡힘 — 로컬 1인 사용 시절 데이터라
+// 마이그레이션할 실사용자가 없다).
+try {
+  db.exec('ALTER TABLE focus_events ADD COLUMN user_id TEXT');
+} catch {
+  // 컬럼이 이미 존재하는 경우
+}
+// 위 ALTER로 컬럼이 막 생겼을 수 있는 기존 DB도 있어서, 인덱스는 컬럼이
+// 확실히 존재한 다음(별도 문장)으로 분리한다.
+db.exec('CREATE INDEX IF NOT EXISTS idx_focus_events_user_date ON focus_events(user_id, occurred_at)');
 
 export default db;

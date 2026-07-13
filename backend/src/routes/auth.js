@@ -14,12 +14,20 @@ const API_URL = process.env.API_BASE_URL || 'http://localhost:4000';
 // 대신 이리로 돌려보내면 앱이 그 딥링크를 가로채 토큰을 읽는다.
 const MOBILE_SCHEME = 'zonemate://auth-callback';
 
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+// httpOnly 쿠키(token)는 브라우저 fetch(credentials:'include')가 자동으로
+// 실어 보내는 진짜 세션이고, 그 값을 그대로 담은 두 번째 non-httpOnly
+// 쿠키(authToken)는 오직 "Electron 메인 프로세스에게 넘겨주기 위해 렌더러가
+// document.cookie로 읽을 수 있게" 존재한다 — Electron 메인 프로세스는 창의
+// 쿠키 저장소에 접근할 수 없어서(별도 Node 프로세스), 렌더러가 로그인 시
+// 이 값을 읽어 IPC로 건네주면 메인 프로세스가 백엔드에 자기 명의로(집중
+// 이벤트 기록 등) 요청할 수 있다. 두 쿠키는 항상 같은 토큰 값을 담는다.
 function setSessionCookie(res, userId) {
-  res.cookie('token', issueToken(userId), {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  });
+  const token = issueToken(userId);
+  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: SESSION_MAX_AGE_MS });
+  res.cookie('authToken', token, { httpOnly: false, sameSite: 'lax', maxAge: SESSION_MAX_AGE_MS });
+  return token;
 }
 
 function toPublicUser(user) {
@@ -111,10 +119,10 @@ router.post('/email/verify', (req, res) => {
   db.prepare('DELETE FROM email_verifications WHERE email = ?').run(email);
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  setSessionCookie(res, user.id);
   // 쿠키(웹/데스크톱)에 더해 토큰을 응답 본문에도 실어준다 — 모바일 앱은
   // 쿠키 대신 이 값을 저장했다가 Authorization 헤더로 보낸다.
-  res.json({ user: toPublicUser(user), token: issueToken(user.id) });
+  const token = setSessionCookie(res, user.id);
+  res.json({ user: toPublicUser(user), token });
 });
 
 router.post('/login', (req, res) => {
@@ -123,8 +131,8 @@ router.post('/login', (req, res) => {
   if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
     return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않아요' });
   }
-  setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user), token: issueToken(user.id) });
+  const token = setSessionCookie(res, user.id);
+  res.json({ user: toPublicUser(user), token });
 });
 
 // ---- 구글 로그인 ----
@@ -169,9 +177,8 @@ router.get('/google/callback', async (req, res) => {
     const profile = await profileRes.json();
 
     const user = upsertOAuthUser({ provider: 'google', providerId: profile.sub, email: profile.email });
-    setSessionCookie(res, user.id);
+    const token = setSessionCookie(res, user.id);
     if (req.query.state === 'mobile') {
-      const token = issueToken(user.id);
       return res.redirect(`${MOBILE_SCHEME}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
     }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
@@ -220,10 +227,9 @@ router.get('/kakao/callback', async (req, res) => {
     const email = profile.kakao_account?.email || `kakao_${profile.id}@no-email.kakao`;
 
     const user = upsertOAuthUser({ provider: 'kakao', providerId: String(profile.id), email });
-    setSessionCookie(res, user.id);
+    const token = setSessionCookie(res, user.id);
     if (req.query.state === 'mobile') {
-      const authToken = issueToken(user.id);
-      return res.redirect(`${MOBILE_SCHEME}?token=${authToken}&nickname=${encodeURIComponent(user.nickname || '')}`);
+      return res.redirect(`${MOBILE_SCHEME}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
     }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
@@ -251,6 +257,7 @@ router.post('/nickname', requireAuth, (req, res) => {
 
 router.post('/logout', (req, res) => {
   res.clearCookie('token');
+  res.clearCookie('authToken');
   res.json({ ok: true });
 });
 

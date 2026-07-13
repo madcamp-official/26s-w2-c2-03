@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import db from '../db.js';
+import { requireAuth } from '../middleware/requireAuth.js';
 
 const router = Router();
+router.use(requireAuth);
 
-// 지금은 metrics.js와 같은 패턴으로 인증 없이 기기 단위(clientId)로만 기록한다
-// — Electron 메인 프로세스는 브라우저 세션 쿠키를 안 갖고 있어서, 나중에
-// 로그인 사용자와 제대로 연결하려면 별도의 인증 브릿지가 필요하다. 지금은
-// "이후 대시보드를 위해 기록을 남기는 것"이 목적이라 단순하게 간다.
+// 예전엔 로그인 없이 기기 clientId로만 기록했다(Electron 메인 프로세스는
+// 브라우저 쿠키가 없어서). 여러 계정이 같은 서버를 공유하는 지금은 계정
+// 구분이 꼭 필요해서, 렌더러가 로그인 시 얻은 토큰을 메인 프로세스에
+// 건네주는 방식(auth.js의 authToken 쿠키 참고)으로 여기도 requireAuth를 쓴다.
 const VALID_TYPES = new Set([
   'session_start',
   'session_end',
@@ -43,9 +45,9 @@ router.post('/', (req, res) => {
 
   try {
     db.prepare(`
-      INSERT INTO focus_events (id, session_id, client_id, type, meta_json)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(randomUUID(), sessionId, clientId || null, type, meta ? JSON.stringify(meta) : null);
+      INSERT INTO focus_events (id, session_id, client_id, type, meta_json, user_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(randomUUID(), sessionId, clientId || null, type, meta ? JSON.stringify(meta) : null, req.user.id);
 
     res.status(201).json({ status: 'ok' });
   } catch (err) {
@@ -68,24 +70,24 @@ router.get('/day/:date', (req, res) => {
   const starts = db.prepare(`
     SELECT session_id, occurred_at, meta_json
     FROM focus_events
-    WHERE type = 'session_start' AND date(occurred_at) = ?
+    WHERE type = 'session_start' AND user_id = ? AND date(occurred_at) = ?
     ORDER BY occurred_at ASC
-  `).all(date);
+  `).all(req.user.id, date);
 
   const endStmt = db.prepare(`
     SELECT occurred_at, meta_json FROM focus_events
-    WHERE session_id = ? AND type = 'session_end'
+    WHERE session_id = ? AND user_id = ? AND type = 'session_end'
     ORDER BY occurred_at DESC LIMIT 1
   `);
   const driftStmt = db.prepare(`
-    SELECT COUNT(*) AS c FROM focus_events WHERE session_id = ? AND type = 'drift_start'
+    SELECT COUNT(*) AS c FROM focus_events WHERE session_id = ? AND user_id = ? AND type = 'drift_start'
   `);
 
   const sessions = starts.map((start) => {
     const startMeta = parseMeta(start.meta_json) || {};
-    const endRow = endStmt.get(start.session_id);
+    const endRow = endStmt.get(start.session_id, req.user.id);
     const endMeta = endRow ? parseMeta(endRow.meta_json) || {} : null;
-    const driftCount = endMeta?.driftCount ?? driftStmt.get(start.session_id).c;
+    const driftCount = endMeta?.driftCount ?? driftStmt.get(start.session_id, req.user.id).c;
 
     // focusApps는 예전엔 객체 배열({name,bundleId,...}), 지금은 이름 배열로
     // 저장돼 있다. 둘 다 이름 문자열 배열로 정규화한다.
@@ -122,9 +124,9 @@ router.get('/:sessionId', (req, res) => {
   const rows = db.prepare(`
     SELECT id, type, occurred_at, meta_json
     FROM focus_events
-    WHERE session_id = ?
+    WHERE session_id = ? AND user_id = ?
     ORDER BY occurred_at ASC, rowid ASC
-  `).all(req.params.sessionId);
+  `).all(req.params.sessionId, req.user.id);
 
   const events = rows.map((row) => ({
     id: row.id,
