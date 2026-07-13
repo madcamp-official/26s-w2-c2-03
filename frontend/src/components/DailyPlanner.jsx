@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { generatePlanChat } from '../api.js';
 import ChecklistRow from './ChecklistRow.jsx';
 import BotAvatar from './BotAvatar.jsx';
@@ -59,6 +59,20 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
   const [error, setError] = useState(null);
   const [planDone, setPlanDone] = useState(false);
   const [showWheel, setShowWheel] = useState(false);
+  const inputRef = useRef(null);
+
+  // 입력이 길어지면 한 줄로 옆으로 늘어나는 대신 줄바꿈되며 텍스트박스가 세로로
+  // 늘어나게 한다. 내용에 맞춰 높이를 재설정하고(최대 높이까지) 그 이상은 스크롤.
+  const MAX_INPUT_HEIGHT = 140;
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const style = window.getComputedStyle(el);
+    const borderY = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    el.style.height = `${Math.min(el.scrollHeight + borderY, MAX_INPUT_HEIGHT)}px`;
+    el.style.overflowY = el.scrollHeight + borderY > MAX_INPUT_HEIGHT ? 'auto' : 'hidden';
+  }, [draft, planDone]);
 
   const questionCount = messages.filter((m) => m.role === 'assistant').length;
 
@@ -214,11 +228,21 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
           </div>
         ) : (
           <form className="chat-input-row" onSubmit={sendMessage}>
-            <input
-              type="text"
+            <textarea
+              ref={inputRef}
+              className="chat-input"
+              rows={1}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="예: 로그인 리팩토링, PR 리뷰, 문서 정리"
+              onKeyDown={(e) => {
+                // 엔터=전송, Shift+엔터=줄바꿈. 한글 IME 조합 중(엔터로 글자 확정)에는
+                // 전송하지 않는다(isComposing) — 안 그러면 조합 중 엔터에 오전송된다.
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  sendMessage(e);
+                }
+              }}
+              placeholder="예: 로그인 리팩토링, PR 리뷰, 문서 정리 (Shift+Enter로 줄바꿈)"
               disabled={loading}
             />
             <button type="submit" className="btn-primary" disabled={loading || !draft.trim()}>

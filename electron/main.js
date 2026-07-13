@@ -327,6 +327,9 @@ const BROADCAST_INTERVAL_MS = 1000;
 // 폴링 tick(2초)마다 갱신. 등락 폭(모멘텀 스텝)은 gaugeMath.js의 GAUGE_MOMENTUM에서 조절.
 // (창 분류는 집중/이탈 상태·알림·통계 쪽에서 계속 쓴다.)
 const GAUGE_ACTIVE_IDLE_SEC = 4; // 이 초 미만 유휴면 "활발히 입력 중"으로 본다
+// 이탈(집중 선택 앱이 아닌 곳)일 때 한 tick(2초)마다 내리는 양. 입력이 있어도 무조건
+// 이만큼 하강 — 집중 앱의 유휴 하강(모멘텀, 처음엔 완만)보다 훨씬 뚜렷하게 떨어진다.
+const GAUGE_DRIFT_DROP = 6;
 // os-tracker(키/마우스 패턴)를 쓸 때: 이 clientId로 spawn하고 백엔드 focus-state를 폴링한다.
 // tracker 입력을 한 번이라도 받으면 lastEventAt으로 활동 여부를 판정하고, tracker 정보가
 // 전혀 없을 때만 powerMonitor.getSystemIdleTime()을 폴백으로 사용한다.
@@ -763,36 +766,46 @@ function stopOsTracker() {
 //   - 'active'(집중 앱에 있음): 키/마우스 활동으로 오르내림. 패턴 점수가 신선하면
 //     그 점수로 상승 "질"을 조절, 없으면 getSystemIdleTime 폴백.
 //   - 'fall'(이탈 중): 딴 앱에서 아무리 타이핑해도 집중 점수는 떨어져야 하므로
-//     입력과 무관하게 무조건 하강(모멘텀 점진 가속).
+//     입력과 무관하게 GAUGE_DRIFT_DROP만큼 뚜렷하게 하강.
 //   - 'hold'(자기 창=Zonemate 보는 중): 유지(올리지도 내리지도 않음).
 function updateGauge(mode) {
   if (mode === 'hold') return;
-  const { active, intensity } = resolveGaugeActivity({
-    mode,
-    inputAt: focusSession.inputAt,
-    inputScore: focusSession.inputScore,
-    now: Date.now(),
-    systemIdleSeconds: powerMonitor.getSystemIdleTime(),
-    trackerGraceMs: INPUT_ACTIVE_GRACE_MS,
-    systemIdleThresholdSeconds: GAUGE_ACTIVE_IDLE_SEC,
-  });
-  // mode === 'fall' 이면 active=false 유지 → 하강.
-  const next = nextGauge(
-    {
-      gauge: focusSession.gauge,
-      activeStreak: focusSession.activeStreak,
-      idleStreak: focusSession.idleStreak,
-    },
-    active,
-    undefined,
-    intensity,
-  );
-  focusSession.gauge = next.gauge;
-  focusSession.activeStreak = next.activeStreak;
-  focusSession.idleStreak = next.idleStreak;
+
+  if (mode === 'fall') {
+    // 이탈 중 — 입력과 무관하게 눈에 띄게 하강한다(고정폭).
+    focusSession.activeStreak = 0;
+    focusSession.idleStreak += 1;
+    focusSession.gauge = Math.max(0, focusSession.gauge - GAUGE_DRIFT_DROP);
+  } else {
+    // 'active' — 집중 앱에 있음. 키/마우스 활동으로 오르내림.
+    const now = Date.now();
+    const fresh = focusSession.inputAt != null && now - focusSession.inputAt < INPUT_FRESH_MS;
+    let active;
+    let intensity = 1;
+    if (fresh) {
+      active = focusSession.inputScore > 0;
+      // 활동이 있으면 최소 0.2는 보장(아주 산발적이어도 조금은 오르게), 최대 1.
+      intensity = active ? Math.max(0.2, focusSession.inputScore / 100) : 1;
+    } else {
+      active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
+    }
+    const next = nextGauge(
+      {
+        gauge: focusSession.gauge,
+        activeStreak: focusSession.activeStreak,
+        idleStreak: focusSession.idleStreak,
+      },
+      active,
+      undefined,
+      intensity,
+    );
+    focusSession.gauge = next.gauge;
+    focusSession.activeStreak = next.activeStreak;
+    focusSession.idleStreak = next.idleStreak;
+  }
 
   // 게이지 저하 지속시간 추적(게이지 기반 알림용).
-  if (next.gauge < GAUGE_LOW_THRESHOLD) {
+  if (focusSession.gauge < GAUGE_LOW_THRESHOLD) {
     if (focusSession.gaugeLowSince == null) focusSession.gaugeLowSince = Date.now();
   } else {
     focusSession.gaugeLowSince = null;

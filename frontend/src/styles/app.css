@@ -208,8 +208,14 @@ textarea:focus, input:focus {
 .chat-bubble-user { background: var(--signal); color: var(--signal-ink); border-bottom-right-radius: 4px; }
 .chat-bubble-loading { opacity: .6; font-style: italic; }
 
-.chat-input-row { display: flex; gap: 8px; }
-.chat-input-row input[type="text"] { flex: 1; margin: 0; }
+.chat-input-row { display: flex; gap: 8px; align-items: flex-end; }
+/* 입력이 길어지면 옆으로가 아니라 줄바꿈되며 세로로 늘어나는 textarea.
+   높이는 JS(DailyPlanner)가 내용에 맞춰 조절하고, max-height 넘으면 스크롤. */
+.chat-input-row .chat-input {
+  flex: 1; margin: 0; resize: none;
+  min-height: 42px; max-height: 140px; line-height: 1.45;
+  font-family: var(--font-sans); overflow-y: hidden;
+}
 .chat-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
 /* ---- 가로 타임라인 시간표 ----
