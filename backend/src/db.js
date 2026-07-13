@@ -5,7 +5,15 @@ import { fileURLToPath } from 'url';
 // better-sqlite3는 이 Node 버전에서 네이티브 빌드가 실패해서, Node 22+ 내장
 // node:sqlite(DatabaseSync)로 대체 — 별도 컴파일 없이 Node 자체에 포함됨
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new DatabaseSync(path.join(__dirname, '..', 'data.sqlite'));
+
+// DB 파일 위치. 패키징된 앱에서는 Electron이 DATA_DIR로 userData 경로
+// (~/Library/Application Support/Zonemate 등)를 넘겨준다 — 이 경로는 앱을
+// 업데이트(재설치)해도 유지되므로 로그인·닉네임·플래너 데이터가 보존된다.
+// 예전엔 __dirname 기준(앱 번들 안)에 저장해서, 업데이트할 때마다 번들이
+// 통째로 교체되며 DB가 사라져 매번 초기화되는 버그가 있었다(2026-07-13 수정).
+// 개발 모드에서는 DATA_DIR이 없어 기존처럼 backend/data.sqlite에 저장한다.
+const dataDir = process.env.DATA_DIR || path.join(__dirname, '..');
+const db = new DatabaseSync(path.join(dataDir, 'data.sqlite'));
 
 db.exec('PRAGMA foreign_keys = ON');
 db.exec('PRAGMA journal_mode = WAL');
@@ -19,7 +27,7 @@ db.exec(`
     provider_id TEXT,
     nickname TEXT,
     email_verified INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
   );
 
   CREATE TABLE IF NOT EXISTS email_verifications (
@@ -40,8 +48,8 @@ db.exec(`
     source_event_id TEXT,
     sort_order INTEGER NOT NULL,
     done INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     PRIMARY KEY (user_id, id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -54,8 +62,8 @@ db.exec(`
     kind TEXT NOT NULL CHECK (kind IN ('deadline', 'roadmap')),
     parent_id TEXT,
     roadmap_json TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     PRIMARY KEY (user_id, id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -64,7 +72,7 @@ db.exec(`
     user_id TEXT NOT NULL,
     date TEXT NOT NULL,
     tasks_json TEXT NOT NULL,
-    archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+    archived_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     PRIMARY KEY (user_id, date),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -81,7 +89,7 @@ db.exec(`
     session_id TEXT NOT NULL,
     client_id TEXT,
     type TEXT NOT NULL,
-    occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
+    occurred_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     meta_json TEXT
   );
 
