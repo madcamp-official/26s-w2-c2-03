@@ -1,6 +1,9 @@
 import { createInitialFocusState, tickFocusState } from './focusEngine.js';
+import { scoreInputWindow, INPUT_PATTERN_WINDOW_MS } from './inputPattern.js';
 
 const DEFAULT_TICK_INTERVAL_MS = 60_000;
+// 최근 입력 이벤트 보관 창(패턴 점수 산출 + 메모리 상한). 산출 창보다 살짝 길게.
+const INPUT_KEEP_MS = INPUT_PATTERN_WINDOW_MS + 30_000;
 const DEFAULT_CLIENT_ID = 'local-device';
 const BROWSER_NAMES = ['chrome', 'edge', 'firefox', 'safari', 'brave', 'opera', 'vivaldi', 'arc'];
 
@@ -14,7 +17,8 @@ function isBrowserApp(appName = '') {
   return BROWSER_NAMES.some((name) => normalized.includes(name));
 }
 
-function publicSession(session) {
+function publicSession(session, now = Date.now()) {
+  const { score, features } = scoreInputWindow(session.recentInputs, now);
   return {
     clientId: session.clientId,
     currentWindow: session.currentWindow,
@@ -22,6 +26,10 @@ function publicSession(session) {
     pendingActivityCount: session.activityCount,
     focusState: session.focusState,
     lastTickReason: session.lastTickReason,
+    // 키/마우스 패턴 기반 입력 집중 점수(0~100)와 특징. Electron 게이지가 폴링해서 쓴다.
+    inputScore: score,
+    inputFeatures: features,
+    lastEventAt: session.lastEventAt,
   };
 }
 
@@ -39,6 +47,8 @@ export function createFocusMetricsAdapter({ tickIntervalMs = DEFAULT_TICK_INTERV
         currentWindow: null,
         latestBrowserTab: null,
         activityCount: 0,
+        recentInputs: [], // 최근 키/마우스 이벤트 {type, t} (패턴 점수용)
+        lastEventAt: null,
         currentTask: null,
         focusState: createInitialFocusState(now),
         lastTickReason: null,
@@ -82,6 +92,13 @@ export function createFocusMetricsAdapter({ tickIntervalMs = DEFAULT_TICK_INTERV
 
       if (log.type === 'click' || log.type === 'keydown') {
         session.activityCount += 1;
+        session.recentInputs.push({ type: log.type, t: timestamp });
+        session.lastEventAt = Math.max(session.lastEventAt || 0, timestamp);
+        // 보관 창 밖 이벤트는 잘라 메모리를 제한한다.
+        const cutoff = timestamp - INPUT_KEEP_MS;
+        if (session.recentInputs.length > 512 || session.recentInputs[0].t < cutoff) {
+          session.recentInputs = session.recentInputs.filter((e) => e.t >= cutoff);
+        }
         continue;
       }
 
@@ -131,7 +148,7 @@ export function createFocusMetricsAdapter({ tickIntervalMs = DEFAULT_TICK_INTERV
   return {
     ingest,
     flushAll,
-    getStates: () => [...sessions.values()].map(publicSession),
+    getStates: () => [...sessions.values()].map((s) => publicSession(s)),
     stop: () => timer && clearInterval(timer),
   };
 }
