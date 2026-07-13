@@ -6,6 +6,7 @@ import { toDateKey } from '../utils/calendarGrid.js';
 import { useFocusSession } from '../hooks/useFocusSession.js';
 import FocusMode from '../components/FocusMode.jsx';
 import FocusStartModal from '../components/FocusStartModal.jsx';
+import FocusSummaryModal from '../components/FocusSummaryModal.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 
 let eventCounter = 1;
@@ -74,6 +75,7 @@ export default function PlannerPage() {
   const { isDesktop, state: focusState, now: focusNow, controls: focusControls } = useFocusSession();
   const [focusModalOpen, setFocusModalOpen] = useState(false);
   const focusActive = Boolean(focusState && focusState.status !== 'idle');
+  const completedFocusSummary = focusState?.lastCompletedSummary || null;
 
   // 마감/캘린더 페이지는 캘린더를 가로로 넓게 쓰도록 컨테이너를 넓힌다.
   const location = useLocation();
@@ -172,6 +174,9 @@ export default function PlannerPage() {
 
   return (
     <div className="page">
+      {completedFocusSummary && (
+        <FocusSummaryModal summary={completedFocusSummary} onClose={focusControls.dismissSummary} />
+      )}
       <div className={`wrap${isDeadlines ? ' wrap-wide' : ''}`}>
         <header className="topbar">
           <div className="wordmark"><b>Zone</b>mate</div>

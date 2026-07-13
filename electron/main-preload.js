@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('zonemate', {
     taskTitle: opts.taskTitle ?? null,
   }),
   stopFocus: () => ipcRenderer.send('stop-focus-session'),
+  dismissFocusSummary: () => ipcRenderer.send('dismiss-focus-summary'),
   startBreak: (minutes) => ipcRenderer.send('start-break', minutes),
   resumeFocus: () => ipcRenderer.send('resume-focus'),
 

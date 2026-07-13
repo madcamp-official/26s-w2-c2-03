@@ -355,6 +355,7 @@ const DRIFT_ALERT_MS = 30 * 1000;
 const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
 const BROADCAST_INTERVAL_MS = 1000;
+const FOCUS_TIMELINE_SAMPLE_MS = 10 * 1000;
 // ---- 집중력 게이지 튜닝 포인트 ----
 // 게이지(0~100)는 활성 창이 아니라 키보드/마우스 활동으로 움직인다.
 // powerMonitor.getSystemIdleTime()이 마지막 키/마우스 입력 이후 흐른 초를 주므로
@@ -444,6 +445,9 @@ const focusSession = {
   underfocusSnoozedUntil: 0,
   lastPageSignature: null,
   classifyingPage: false,
+  focusSegmentCount: 0,
+  timeline: [],
+  lastCompletedSummary: null,
   // ---- 브라우저 탭 관련성 판정 캐시 ----
   // classifyCurrentBrowserPage()가 비동기로 채우고, pollFocus()가 동기로
   // 읽는다. pageWindowTitle이 "지금 활성 창 제목"과 같을 때만 pageClassification을
@@ -638,9 +642,28 @@ function setCurrentState(state, now = Date.now()) {
 }
 
 // React에 보낼 현재 상태 스냅샷. 진행 중인 구간까지 반영하려고 먼저 정산한다.
+function recordFocusTimeline(now = Date.now(), force = false) {
+  if (focusSession.status === 'idle' || focusSession.sessionStartedAt == null) return;
+
+  const last = focusSession.timeline[focusSession.timeline.length - 1];
+  if (!force && last && now - last.at < FOCUS_TIMELINE_SAMPLE_MS) return;
+
+  const point = {
+    at: now,
+    elapsedMs: Math.max(0, now - focusSession.sessionStartedAt),
+    gauge: Math.round(focusSession.gauge),
+    state: focusSession.currentState,
+  };
+  if (last && last.at === now) focusSession.timeline[focusSession.timeline.length - 1] = point;
+  else focusSession.timeline.push(point);
+}
+
 function buildFocusSnapshot() {
   const now = Date.now();
-  if (focusSession.status !== 'idle') accrueStats(now);
+  if (focusSession.status !== 'idle') {
+    accrueStats(now);
+    recordFocusTimeline(now);
+  }
 
   return {
     status: focusSession.status, // 'idle' | 'focusing' | 'onBreak'
@@ -665,6 +688,7 @@ function buildFocusSnapshot() {
     lastReturnMs: focusSession.lastReturnMs,
     driftCount: focusSession.driftCount,
     gauge: Math.round(focusSession.gauge),
+    lastCompletedSummary: focusSession.lastCompletedSummary,
   };
 }
 
@@ -692,6 +716,7 @@ function stopBroadcasting() {
 // 권할 수 있게 한다.
 function beginFocusStreak(now) {
   focusSession.focusStreakStartedAt = now;
+  focusSession.focusSegmentCount += 1;
   focusSession.overfocusSnoozedUntil = 0;
 }
 
@@ -1075,6 +1100,9 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
 
   // 통계 초기화 — 새 세션 시작이므로 게이지도 만점에서 출발한다.
   focusSession.sessionStartedAt = now;
+  focusSession.focusSegmentCount = 0;
+  focusSession.timeline = [];
+  focusSession.lastCompletedSummary = null;
   beginFocusStreak(now);
   focusSession.currentState = 'focus';
   focusSession.accountedAt = now;
@@ -1109,12 +1137,35 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
 function stopFocusSession() {
   if (focusSession.status === 'idle') return;
 
-  accrueStats();
+  const endedAt = Date.now();
+  accrueStats(endedAt);
+  recordFocusTimeline(endedAt, true);
+  const activeMs = focusSession.totalFocusMs + focusSession.totalDriftMs;
+  const averageFocusMs = focusSession.focusSegmentCount > 0
+    ? Math.round(focusSession.totalFocusMs / focusSession.focusSegmentCount)
+    : 0;
+  focusSession.lastCompletedSummary = {
+    id: focusSession.id,
+    taskTitle: focusSession.taskTitle,
+    startedAt: focusSession.sessionStartedAt,
+    endedAt,
+    totalElapsedMs: Math.max(0, endedAt - focusSession.sessionStartedAt),
+    totalFocusMs: focusSession.totalFocusMs,
+    totalDriftMs: focusSession.totalDriftMs,
+    totalBreakMs: focusSession.totalBreakMs,
+    averageFocusMs,
+    focusSegmentCount: focusSession.focusSegmentCount,
+    focusRate: activeMs > 0 ? Math.round((focusSession.totalFocusMs / activeMs) * 100) : 0,
+    driftCount: focusSession.driftCount,
+    timeline: focusSession.timeline.map((point) => ({ ...point })),
+  };
   logFocusEvent('session_end', {
     totalFocusMs: focusSession.totalFocusMs,
     totalDriftMs: focusSession.totalDriftMs,
     totalBreakMs: focusSession.totalBreakMs,
     driftCount: focusSession.driftCount,
+    averageFocusMs,
+    focusSegmentCount: focusSession.focusSegmentCount,
   });
 
   stopOsTracker(); // 집중 세션 끝나면 키/마우스 수집도 중단
@@ -1129,6 +1180,8 @@ function stopFocusSession() {
   focusSession.pendingReturnApp = null;
   focusSession.focusStreakStartedAt = null;
   focusSession.breakStartedAt = null;
+  focusSession.sessionStartedAt = null;
+  focusSession.accountedAt = null;
 
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = null;
@@ -1337,6 +1390,10 @@ ipcMain.on('cancel-break-picker', () => {
 
 // ---- 앱 내부(React) 집중 컨트롤용 ----
 ipcMain.on('stop-focus-session', () => stopFocusSession());
+ipcMain.on('dismiss-focus-summary', () => {
+  focusSession.lastCompletedSummary = null;
+  broadcastFocusState();
+});
 ipcMain.on('resume-focus', () => endBreak('manual'));
 ipcMain.handle('get-focus-state', () => buildFocusSnapshot());
 ipcMain.handle('get-app-version', () => app.getVersion());

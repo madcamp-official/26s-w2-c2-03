@@ -35,6 +35,7 @@ export function useFocusSession() {
     getOpenApps: () => bridge.getOpenApps(),
     startFocus: (apps, opts) => bridge.startFocus(apps, opts),
     stopFocus: () => bridge.stopFocus(),
+    dismissSummary: () => bridge.dismissFocusSummary(),
     startBreak: (minutes) => bridge.startBreak(minutes),
     resumeFocus: () => bridge.resumeFocus(),
   };
