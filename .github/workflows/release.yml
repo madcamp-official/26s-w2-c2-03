@@ -1,0 +1,65 @@
+name: Release
+
+# 사용법:
+#   1) electron/package.json 의 "version" 을 올린다 (예: 0.1.2 -> 0.1.3)
+#   2) git tag v0.1.3 && git push origin v0.1.3
+#   3) 이 워크플로가 mac(universal) + Windows(x64) 를 빌드해 GitHub Release "초안"에 올린다
+#   4) GitHub Releases 에서 초안을 확인하고 "Publish" 하면 공개된다
+#      -> 공개(non-draft)되는 순간부터 설치된 앱들이 update.electronjs.org 를 통해 자동 업데이트된다
+#
+# 참고: macOS 자동 업데이트는 Apple Developer ID 코드서명 + 노터라이즈가 있어야만 동작한다.
+#       서명을 붙이려면 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 시크릿을 추가하고
+#       forge.config.js packagerConfig 에 osxSign/osxNotarize 를 설정한다.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        shell: bash
+        run: |
+          (cd frontend && npm ci)
+          (cd backend && npm ci)
+          (cd electron && npm ci)
+      - name: Build frontend + stage resources
+        working-directory: electron
+        run: npm run build:resources
+      - name: Publish macOS (universal) to GitHub Release (draft)
+        working-directory: electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-forge publish --arch=universal
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        shell: bash
+        run: |
+          (cd frontend && npm ci)
+          (cd backend && npm ci)
+          (cd electron && npm ci)
+      - name: Build frontend + stage resources
+        working-directory: electron
+        run: npm run build:resources
+      - name: Publish Windows (x64) to GitHub Release (draft)
+        working-directory: electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-forge publish --arch=x64

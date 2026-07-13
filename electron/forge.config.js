@@ -64,4 +64,17 @@ module.exports = {
       config: {},
     },
   ],
+  publishers: [
+    {
+      // 빌드 산출물을 GitHub Release로 올린다. draft:true라 CI는 "초안"까지만
+      // 만들고, 사람이 GitHub에서 확인 후 발행해야 실제 공개(=자동 업데이트 노출)된다.
+      // update.electronjs.org는 발행된(=non-draft) 릴리스만 읽는다.
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: { owner: 'madcamp-official', name: '26s-w2-c2-03' },
+        draft: true,
+        prerelease: false,
+      },
+    },
+  ],
 };
