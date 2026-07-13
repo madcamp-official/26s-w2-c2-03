@@ -12,6 +12,7 @@ const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const http = require('node:http');
+const https = require('node:https');
 const fs = require('node:fs');
 const { nextGauge, resolveGaugeActivity } = require('./gaugeMath');
 
@@ -132,11 +133,19 @@ function startFrontend() {
   });
 }
 
+// 로컬 백엔드는 http, 공유 Railway 서버는 https라 URL에 맞는 모듈을 골라야
+// 한다 — http.get/request는 프로토콜이 안 맞으면 즉시 예외를 던져서(이
+// 예외가 app.whenReady() 체인을 끊어 창이 아예 안 뜨는 버그로 실제 발생함,
+// v0.1.16 배포 직후 발견) 안전하지 않다.
+function httpClientFor(url) {
+  return url.startsWith('https:') ? https : http;
+}
+
 function waitForServer(url, { timeoutMs = 20000, intervalMs = 300 } = {}) {
   const startedAt = Date.now();
   return new Promise((resolve, reject) => {
     function attempt() {
-      http.get(url, (res) => {
+      httpClientFor(url).get(url, (res) => {
         res.resume();
         resolve();
       }).on('error', () => {
@@ -156,7 +165,7 @@ function waitForServer(url, { timeoutMs = 20000, intervalMs = 300 } = {}) {
 // 죽어버린다.
 function isServerReady(url) {
   return new Promise((resolve) => {
-    const request = http.get(url, (res) => {
+    const request = httpClientFor(url).get(url, (res) => {
       res.resume();
       resolve(res.statusCode >= 200 && res.statusCode < 500);
     });
@@ -214,8 +223,9 @@ function createWindow() {
 function logFocusEvent(type, meta) {
   if (!focusSession.id) return;
   const payload = JSON.stringify({ sessionId: focusSession.id, clientId: 'zonemate-desktop', type, meta });
-  const req = http.request(
-    `${BACKEND_ORIGIN}/api/focus-events`,
+  const eventsUrl = `${BACKEND_ORIGIN}/api/focus-events`;
+  const req = httpClientFor(eventsUrl).request(
+    eventsUrl,
     { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } },
     (res) => res.resume(),
   );
@@ -785,7 +795,8 @@ function openBreakPicker() {
 // 창 종류와 무관하게 "지금 손을 움직이고 있는가"만 본다(창 판단은 pollFocus에서 따로).
 // 백엔드 focus-state를 폴링해 os-tracker 패턴 점수를 캐시한다(게이지 상승 조절용).
 function fetchInputStateOnce() {
-  const req = http.get(`${BACKEND_ORIGIN}/api/metrics/focus-state`, (res) => {
+  const focusStateUrl = `${BACKEND_ORIGIN}/api/metrics/focus-state`;
+  const req = httpClientFor(focusStateUrl).get(focusStateUrl, (res) => {
     let body = '';
     res.on('data', (c) => { body += c; });
     res.on('end', () => {
