@@ -514,8 +514,8 @@ function accrueStats(now = Date.now()) {
 function setCurrentState(state, now = Date.now()) {
   accrueStats(now);
   focusSession.currentState = state;
-  // 게이지는 창 상태가 아니라 키보드/마우스 활동으로만 움직인다
-  // (updateGaugeFromActivity, pollFocus에서 매 tick 호출).
+  // 게이지는 pollFocus가 상태(집중/이탈/자기창)에 맞는 mode로 updateGauge()를
+  // 호출해 갱신한다 — 집중 앱에선 키/마우스 활동, 이탈 중엔 무조건 하강.
 }
 
 // React에 보낼 현재 상태 스냅샷. 진행 중인 구간까지 반영하려고 먼저 정산한다.
@@ -525,7 +525,11 @@ function buildFocusSnapshot() {
 
   return {
     status: focusSession.status, // 'idle' | 'focusing' | 'onBreak'
-    isDrifting: focusSession.status === 'focusing' && focusSession.driftStartedAt != null,
+    // 자기 창(Zonemate 대시보드)을 보는 중(state 'self')엔 이탈로 표시하지 않는다
+    // — 트레이 열기든 알트탭이든 Zonemate를 보는 건 이탈이 아니다.
+    isDrifting: focusSession.status === 'focusing'
+      && focusSession.driftStartedAt != null
+      && focusSession.currentState !== 'self',
     targetMinutes: focusSession.targetMinutes,
     taskTitle: focusSession.taskTitle,
     focusApps: focusSession.focusApps.map((a) => ({ appId: a.appId, name: a.name })),
@@ -753,18 +757,28 @@ function stopOsTracker() {
   if (osTrackerProcess) { osTrackerProcess.kill(); osTrackerProcess = null; }
 }
 
-function updateGaugeFromActivity() {
-  const now = Date.now();
-  const fresh = focusSession.inputAt != null && now - focusSession.inputAt < INPUT_FRESH_MS;
-  let active;
+// 집중력 게이지를 상태(mode)에 맞게 한 tick 갱신한다.
+//   - 'active'(집중 앱에 있음): 키/마우스 활동으로 오르내림. 패턴 점수가 신선하면
+//     그 점수로 상승 "질"을 조절, 없으면 getSystemIdleTime 폴백.
+//   - 'fall'(이탈 중): 딴 앱에서 아무리 타이핑해도 집중 점수는 떨어져야 하므로
+//     입력과 무관하게 무조건 하강(모멘텀 점진 가속).
+//   - 'hold'(자기 창=Zonemate 보는 중): 유지(올리지도 내리지도 않음).
+function updateGauge(mode) {
+  if (mode === 'hold') return;
+  let active = false;
   let intensity = 1;
-  if (fresh) {
-    active = focusSession.inputScore > 0;
-    // 활동이 있으면 최소 0.2는 보장(아주 산발적이어도 조금은 오르게), 최대 1.
-    intensity = active ? Math.max(0.2, focusSession.inputScore / 100) : 1;
-  } else {
-    active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
+  if (mode === 'active') {
+    const now = Date.now();
+    const fresh = focusSession.inputAt != null && now - focusSession.inputAt < INPUT_FRESH_MS;
+    if (fresh) {
+      active = focusSession.inputScore > 0;
+      // 활동이 있으면 최소 0.2는 보장(아주 산발적이어도 조금은 오르게), 최대 1.
+      intensity = active ? Math.max(0.2, focusSession.inputScore / 100) : 1;
+    } else {
+      active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
+    }
   }
+  // mode === 'fall' 이면 active=false 유지 → 하강.
   const next = nextGauge(
     {
       gauge: focusSession.gauge,
@@ -790,15 +804,12 @@ function updateGaugeFromActivity() {
 async function pollFocus() {
   if (focusSession.status !== 'focusing') return;
   fetchInputStateOnce();
-  updateGaugeFromActivity();
   try {
-    // Zonemate 자기 자신은 집중 대상에서 항상 제외한다 — 집중 중 대시보드나
-    // 알림/설정 창을 보고 있는 건 이탈도 집중도 아니므로 아무 것도 세지 않고
-    // 그냥 넘어간다. 하드코딩된 bundleId 대신 우리 창이 포커스됐는지로 판별해
-    // 개발/배포 환경에 상관없이 동작하게 한다.
-    const isSelfFocused = BrowserWindow.getAllWindows()
-      .some((w) => !w.isDestroyed() && w.isFocused());
-    if (isSelfFocused) {
+    // Zonemate 자기 자신은 집중 대상에서 항상 제외한다(대시보드/알림/설정 창을
+    // 보는 건 이탈도 집중도 아님). 게이지는 'hold'로 유지한다.
+    // 1) 우리 창이 포커스됐으면(트레이 열기/클릭) 바로 self.
+    if (BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused())) {
+      updateGauge('hold');
       setCurrentState('self');
       return;
     }
@@ -806,6 +817,16 @@ async function pollFocus() {
     const { activeWindow } = await loadGetWindows();
     const info = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
     const activeApp = appIdentity(info);
+
+    // 2) 알트탭 등으로 활성 창이 우리 앱 자신이면(isFocused가 아직 안 잡혀도) self.
+    //    isFocused()만 믿으면 알트탭 진입 순간 우리 창을 '딴 앱'으로 오판해 이탈로
+    //    잡히는 버그가 있었다 — 활성 창 소유 프로세스가 우리 pid면 self로 처리.
+    if (info?.owner?.processId != null && info.owner.processId === process.pid) {
+      updateGauge('hold');
+      setCurrentState('self');
+      return;
+    }
+
     const onFocusApp = activeApp && focusSession.focusAppIds.has(activeApp.appId);
     const now = Date.now();
 
@@ -819,6 +840,7 @@ async function pollFocus() {
         // 않는다 — "재개하기"를 눌러 명시적으로 확인해야 실제로 집중을
         // 재개한 것으로 본다. 확인 전까지는 이탈 상태(및 통계)를 그대로 유지.
         setCurrentState('drift');
+        updateGauge('fall'); // 이탈 중 → 입력 있어도 게이지 하강
         if (!alertWindow) {
           focusSession.pendingReturnApp = activeApp;
           const driftMs = focusSession.driftStartedAt ? now - focusSession.driftStartedAt : 0;
@@ -844,6 +866,7 @@ async function pollFocus() {
         beginFocusStreak(now);
       }
       setCurrentState('focus');
+      updateGauge('active'); // 집중 앱에 있음 → 키/마우스 활동으로 게이지 오르내림
       focusSession.lastFocusApp = activeApp;
       focusSession.driftStartedAt = null;
       focusSession.driftAppName = null;
@@ -852,6 +875,7 @@ async function pollFocus() {
     }
 
     setCurrentState('drift');
+    updateGauge('fall'); // 이탈 중 → 입력 있어도 게이지 하강
     if (!focusSession.driftStartedAt) {
       focusSession.driftStartedAt = now;
       focusSession.driftAppName = info?.owner?.name || '다른 창';
