@@ -1,4 +1,7 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor } = require('electron');
+const {
+  app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor,
+  systemPreferences, desktopCapturer, dialog, shell,
+} = require('electron');
 const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -461,6 +464,42 @@ async function classifyCurrentBrowserPage() {
     console.error('[electron] page classification failed:', err.message);
   } finally {
     focusSession.classifyingPage = false;
+  }
+}
+
+// macOS Sonoma부터는 화면 기록 권한이 없으면 CGWindowListCopyWindowInfo가
+// 다른 앱의 창 정보를 아예 안 돌려준다(get-windows의 activeWindow/openWindows가
+// screenRecordingPermission:false로 title만 빼도 owner조차 못 얻어 집중 대상
+// 앱을 인식하지 못하는 문제로 나타남). desktopCapturer.getSources() 호출 자체가
+// macOS의 화면 기록 권한 다이얼로그를 띄우는 표준적인 트리거라 이를 이용해
+// 앱을 처음 켤 때 자동으로 권한을 요청한다. 이미 허용/거부된 상태면 OS가
+// 다이얼로그를 다시 띄우지 않으므로 매 실행마다 호출해도 안전하다.
+async function ensureScreenRecordingPermission() {
+  if (process.platform !== 'darwin') return;
+
+  if (systemPreferences.getMediaAccessStatus('screen') !== 'granted') {
+    try {
+      await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
+    } catch (err) {
+      console.error('[electron] 화면 기록 권한 요청 실패:', err.message);
+    }
+  }
+
+  if (systemPreferences.getMediaAccessStatus('screen') === 'granted') return;
+
+  // '허용 안함'을 이미 눌렀거나 시스템이 다이얼로그를 안 띄운 경우(재실행 등) —
+  // 직접 안내하고 정확한 설정 화면으로 보낸다.
+  const { response } = await dialog.showMessageBox({
+    type: 'info',
+    title: 'Zonemate 권한이 필요해요',
+    message: '집중 상태를 판단하려면 화면 기록 권한이 필요해요',
+    detail: '지금 어떤 앱을 보고 있는지 확인하는 용도로만 쓰이고, 화면 내용을 저장하거나 전송하지 않아요.\n\n"설정 열기"를 누른 뒤 목록에서 Zonemate를 켜고, Zonemate를 재시작해주세요.',
+    buttons: ['설정 열기', '나중에'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) {
+    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
   }
 }
 
@@ -1205,6 +1244,10 @@ ipcMain.handle('get-focus-state', () => buildFocusSnapshot());
 
 app.whenReady().then(async () => {
   createTray();
+  // 창이 뜨기를 기다리지 않고 바로 요청 — 사용자가 앱을 여는 순간 macOS
+  // 권한 다이얼로그가 뜨도록 한다. 백엔드/프론트 기동을 막지 않기 위해
+  // await하지 않는다.
+  void ensureScreenRecordingPermission();
 
   const [backendAlreadyRunning, frontendAlreadyRunning] = await Promise.all([
     isServerReady(BACKEND_HEALTH_URL),
