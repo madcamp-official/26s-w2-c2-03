@@ -1,9 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { version } = require('../package.json');
 
 const forgeOutDirectory = path.join(
   process.env.PUBLIC || process.env.TEMP || path.join(__dirname, '..'),
-  'ZonemateBuild',
+  process.env.ZONEMATE_FORGE_OUT || `ZonemateBuild-${version}`,
 );
 const squirrelDirectory = path.join(forgeOutDirectory, 'make', 'squirrel.windows', 'x64');
 const releaseDirectory = path.join(__dirname, '..', 'release');

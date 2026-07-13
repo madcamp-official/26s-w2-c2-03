@@ -1,11 +1,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { version } = require('../package.json');
 
 // forge.config.js와 동일한 outDir 규칙.
 const forgeOutDirectory = path.join(
   process.env.PUBLIC || process.env.TEMP || os.tmpdir(),
-  'ZonemateBuild',
+  process.env.ZONEMATE_FORGE_OUT || `ZonemateBuild-${version}`,
 );
 const makeDirectory = path.join(forgeOutDirectory, 'make');
 const releaseDirectory = path.join(__dirname, '..', 'release');

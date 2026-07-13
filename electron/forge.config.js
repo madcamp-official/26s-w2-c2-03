@@ -1,5 +1,6 @@
 const path = require('node:path');
 const os = require('node:os');
+const { version } = require('./package.json');
 
 // Squirrel의 rcedit.exe는 한글이 포함된 경로에서 Setup.exe를 열지 못한다.
 // 항상 ASCII인 임시 경로(Windows=Public, mac/linux=os.tmpdir())에서 만든 뒤
@@ -7,7 +8,7 @@ const os = require('node:os');
 // 경로를 쓰는 게 안전하고 repo도 깨끗하게 유지된다.)
 const forgeOutDirectory = path.join(
   process.env.PUBLIC || process.env.TEMP || os.tmpdir(),
-  'ZonemateBuild',
+  process.env.ZONEMATE_FORGE_OUT || `ZonemateBuild-${version}`,
 );
 
 module.exports = {
