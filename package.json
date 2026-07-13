@@ -1,0 +1,8 @@
+{
+  "name": "zonemate-monorepo",
+  "private": true,
+  "description": "빌드 감지용 최상위 package.json — 실제 앱 코드는 backend/, frontend/, electron/에 있다. Railway가 리포 루트에서 backend+frontend를 함께 빌드하려면(railway.json 참고) Railpack이 이 파일을 보고 Node 런타임을 프로비저닝해야 한다.",
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
