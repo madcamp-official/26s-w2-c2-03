@@ -51,8 +51,21 @@ const ROOT = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..')
 const BACKEND_DIR = path.join(ROOT, 'backend');
 const FRONTEND_DIR = path.join(ROOT, 'frontend');
 const BACKEND_PORT = app.isPackaged ? Number(process.env.ZONEMATE_PORT) || 4000 : 4000;
-const BACKEND_ORIGIN = `http://localhost:${BACKEND_PORT}`;
-const FRONTEND_URL = app.isPackaged ? BACKEND_ORIGIN : 'http://localhost:5173';
+
+// 패키지 빌드는 이제 로컬 백엔드를 자체적으로 띄우지 않고, 팀이 공유하는
+// Railway 서버 하나를 바라본다 — 그래야 로그인/플래너/캘린더 데이터가
+// 기기(PC마다 따로 있던 SQLite)가 아니라 계정 기준으로 공유되고, 나중에
+// 모바일 앱도 같은 서버에 붙을 수 있다. 카카오/구글 OAuth 키도 이제
+// 서버에만 있고 배포본에는 들어가지 않는다. Railway 점검 등으로 원격
+// 서버를 잠시 못 쓸 때는 ZONEMATE_LOCAL_BACKEND=1로 예전처럼 로컬 백엔드
+// 스폰 경로를 켤 수 있다(비상용 폴백, 평소엔 안 씀). 개발(비패키지) 모드는
+// 이 로직과 무관하게 항상 localhost 백엔드/Vite를 그대로 쓴다.
+const REMOTE_ORIGIN = process.env.ZONEMATE_REMOTE_ORIGIN
+  || 'https://26s-w2-c2-03-production.up.railway.app';
+const USE_REMOTE = app.isPackaged && process.env.ZONEMATE_LOCAL_BACKEND !== '1';
+
+const BACKEND_ORIGIN = USE_REMOTE ? REMOTE_ORIGIN : `http://localhost:${BACKEND_PORT}`;
+const FRONTEND_URL = USE_REMOTE ? REMOTE_ORIGIN : (app.isPackaged ? BACKEND_ORIGIN : 'http://localhost:5173');
 const BACKEND_HEALTH_URL = `${BACKEND_ORIGIN}/api/health`;
 const SMOKE_TEST = process.env.ELECTRON_SMOKE_TEST === '1';
 
