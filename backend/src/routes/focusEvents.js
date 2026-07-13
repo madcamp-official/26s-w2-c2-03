@@ -17,6 +17,7 @@ const VALID_TYPES = new Set([
   'alert_action',
   'overfocus_alert',
   'underfocus_alert',
+  'gauge_low_alert',
   'break_start',
   'break_end',
 ]);

@@ -3,6 +3,7 @@ const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const http = require('node:http');
+const { nextGauge } = require('./gaugeMath');
 
 // Windows Squirrel 인스톨러 전용 처리. 이 모듈은 패키징 빌드에만 필요하고
 // macOS/개발 환경에는 없을 수 있어서, 없으면 조용히 건너뛴다(없다고 앱이
@@ -317,13 +318,17 @@ const DRIFT_ALERT_MS = 6 * 1000;
 const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
 const BROADCAST_INTERVAL_MS = 1000;
-// 집중력 게이지(0~100)는 활성 창이 아니라 키보드/마우스 활동으로 움직인다.
+// ---- 집중력 게이지 튜닝 포인트 ----
+// 게이지(0~100)는 활성 창이 아니라 키보드/마우스 활동으로 움직인다.
 // powerMonitor.getSystemIdleTime()이 마지막 키/마우스 입력 이후 흐른 초를 주므로
-// (네이티브 모듈·추가 권한 불필요), 최근 입력이 있으면 게이지를 올리고 입력이
-// 끊기면 내린다. 폴링 tick(2초)마다 갱신. (창 분류는 집중/이탈 상태·알림·통계 쪽에서 계속 쓴다.)
+// (네이티브 모듈·추가 권한 불필요), 최근 입력이 있으면 올리고 끊기면 내린다.
+// 폴링 tick(2초)마다 갱신. 등락 폭(모멘텀 스텝)은 gaugeMath.js의 GAUGE_MOMENTUM에서 조절.
+// (창 분류는 집중/이탈 상태·알림·통계 쪽에서 계속 쓴다.)
 const GAUGE_ACTIVE_IDLE_SEC = 4; // 이 초 미만 유휴면 "활발히 입력 중"으로 본다
-const GAUGE_UP_STEP = 4;         // 활동 중일 때 한 tick마다 올리는 양
-const GAUGE_DOWN_STEP = 3;       // 입력이 끊겼을 때 한 tick마다 내리는 양
+// 게이지 기반 알림: 게이지가 이 값 미만으로 아래 시간 이상 지속되면 "손이 멈췄어요" 알림
+const GAUGE_LOW_THRESHOLD = 25;
+const GAUGE_LOW_ALERT_MS = 3 * 60 * 1000;
+const GAUGE_ALERT_SNOOZE_MS = 10 * 60 * 1000;
 
 // ---- 선제 알림(웰빙) 기준 ----
 // 과몰입: 집중 시작 때 받은 목표 시간(targetMinutes)의 이 배수를 쉬지 않고
@@ -381,10 +386,14 @@ const focusSession = {
   lastReturnMs: null, // 가장 최근 이탈에서 돌아오기까지 걸린 시간
   driftCount: 0, // 세션 중 이탈한 횟수
   gauge: 50, // 집중력 게이지(0~100). 중간값 50에서 시작해 키/마우스 활동으로 오르내린다.
+  activeStreak: 0, // 연속 활동 tick 수(모멘텀 상승 가속용)
+  idleStreak: 0,   // 연속 유휴 tick 수(모멘텀 하강 가속용)
+  gaugeLowSince: null, // 게이지가 저점 아래로 내려간 시각(null이면 정상)
 
   // 선제 알림(웰빙) 스누즈 — 이 시각 전에는 각각 다시 알리지 않는다.
   overfocusSnoozedUntil: 0, // 이번 집중 streak가 새로 시작되면 0으로 리셋
   underfocusSnoozedUntil: 0,
+  gaugeAlertSnoozedUntil: 0, // 게이지 저하 알림 스누즈
 };
 
 // 활성/열린 창 정보에서 플랫폼에 상관없이 앱을 식별할 키를 뽑아낸다.
@@ -555,6 +564,29 @@ function evaluateWellbeingAlerts() {
         { id: 'ignore_wellbeing', label: '계속하기' },
       ],
     });
+    return;
+  }
+
+  // 3) 게이지 저하(손이 멈춤): 집중력 게이지가 저점 아래로 일정 시간 이상 지속.
+  //    창 기반 '집중 저하'(딴짓 누적)와는 다른 신호 — 집중 앱에 있어도 손이 오래
+  //    멈춰 있으면(딴생각/자리 이탈 직전) 부드럽게 환기한다.
+  if (
+    focusSession.gaugeLowSince != null
+    && now - focusSession.gaugeLowSince >= GAUGE_LOW_ALERT_MS
+    && now >= focusSession.gaugeAlertSnoozedUntil
+  ) {
+    focusSession.gaugeAlertSnoozedUntil = now + GAUGE_ALERT_SNOOZE_MS;
+    const lowMin = Math.round((now - focusSession.gaugeLowSince) / 60000);
+    logFocusEvent('gauge_low_alert', { gauge: Math.round(focusSession.gauge), lowForMs: now - focusSession.gaugeLowSince });
+    showFocusAlert({
+      type: 'gauge_low',
+      title: '집중이 흐트러진 것 같아요',
+      message: `${lowMin}분째 키보드·마우스 움직임이 거의 없어요. 잠깐 스트레칭하거나 짧게 쉬어가는 건 어때요?`,
+      actions: [
+        { id: 'take_break', label: '휴식하기', primary: true },
+        { id: 'ignore_wellbeing', label: '계속하기' },
+      ],
+    });
   }
 }
 
@@ -605,14 +637,29 @@ function openBreakPicker() {
 }
 
 // 집중력 게이지를 키보드/마우스 활동으로 갱신한다. 최근 입력이 있으면(유휴 시간이
-// 짧으면) 올리고, 입력이 끊기면 내린다. 창 종류와 무관하게 "지금 손을 움직이고
-// 있는가"만 본다 — 창 기반 판단(집중/이탈)은 아래 pollFocus 본문에서 따로 한다.
+// 짧으면) 올리고, 입력이 끊기면 내린다. 등락 폭은 모멘텀 방식(gaugeMath.nextGauge):
+// 집중(입력)이 이어질수록 상승이 빨라지고, 이탈(공백)이 이어질수록 하강이 점진
+// 가속된다. 창 종류와 무관하게 "지금 손을 움직이고 있는가"만 본다 — 창 기반
+// 판단(집중/이탈)은 아래 pollFocus 본문에서 따로 한다.
 function updateGaugeFromActivity() {
-  const idleSec = powerMonitor.getSystemIdleTime();
-  if (idleSec < GAUGE_ACTIVE_IDLE_SEC) {
-    focusSession.gauge = Math.min(100, focusSession.gauge + GAUGE_UP_STEP);
+  const active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
+  const next = nextGauge(
+    {
+      gauge: focusSession.gauge,
+      activeStreak: focusSession.activeStreak,
+      idleStreak: focusSession.idleStreak,
+    },
+    active,
+  );
+  focusSession.gauge = next.gauge;
+  focusSession.activeStreak = next.activeStreak;
+  focusSession.idleStreak = next.idleStreak;
+
+  // 게이지 저하 지속시간 추적(게이지 기반 알림용).
+  if (next.gauge < GAUGE_LOW_THRESHOLD) {
+    if (focusSession.gaugeLowSince == null) focusSession.gaugeLowSince = Date.now();
   } else {
-    focusSession.gauge = Math.max(0, focusSession.gauge - GAUGE_DOWN_STEP);
+    focusSession.gaugeLowSince = null;
   }
 }
 
@@ -731,7 +778,11 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.lastReturnMs = null;
   focusSession.driftCount = 0;
   focusSession.gauge = 50;
+  focusSession.activeStreak = 0;
+  focusSession.idleStreak = 0;
+  focusSession.gaugeLowSince = null;
   focusSession.underfocusSnoozedUntil = 0;
+  focusSession.gaugeAlertSnoozedUntil = 0;
 
   logFocusEvent('session_start', {
     focusApps: focusApps.map((a) => a.name),
