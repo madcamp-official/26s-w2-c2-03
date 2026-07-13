@@ -37,9 +37,17 @@ app.use('/api/daily-archives', dailyArchiveRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/focus-events', focusEventsRouter);
 
-// 패키징된 앱에서는 백엔드가 프론트엔드 정적 빌드도 같은 오리진에서 서빙한다.
-// 개발 중에는 Vite dev 서버(:5173)를 쓰므로 FRONTEND_DIST_DIR이 없어 건너뛴다.
-const frontendDistDir = process.env.FRONTEND_DIST_DIR;
+// 패키징된 앱/Railway에서는 백엔드가 프론트엔드 정적 빌드도 같은 오리진에서
+// 서빙한다. 개발 중에는 Vite dev 서버(:5173)를 쓰므로 FRONTEND_DIST_DIR이
+// 없어 건너뛴다. res.sendFile()은 절대경로만 받는데(상대경로면 그냥 무시하지
+// 않고 예외를 던짐) FRONTEND_DIST_DIR을 상대경로(예: "frontend/dist")로 줄
+// 수도 있으므로 path.resolve()로 항상 절대경로로 정규화한다 — 안 그러면
+// express.static이 자동 서빙하는 "/"는 우연히 통과해도, 그 외 SPA 라우트
+// (예: OAuth 로그인 후 리다이렉트되는 /nickname, /today)는 이 sendFile
+// 폴백을 타면서 500 에러로 죽는다(실제로 카카오 로그인 직후 발생 확인).
+const frontendDistDir = process.env.FRONTEND_DIST_DIR
+  ? path.resolve(process.env.FRONTEND_DIST_DIR)
+  : undefined;
 if (frontendDistDir) {
   const indexHtmlPath = path.join(frontendDistDir, 'index.html');
   if (fs.existsSync(indexHtmlPath)) {
