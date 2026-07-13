@@ -10,6 +10,9 @@ const router = Router();
 const CODE_TTL_MIN = 10;
 const APP_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
 const API_URL = process.env.API_BASE_URL || 'http://localhost:4000';
+// 모바일 앱(Expo)이 등록하는 커스텀 URL 스킴 — OAuth 콜백에서 웹 프론트
+// 대신 이리로 돌려보내면 앱이 그 딥링크를 가로채 토큰을 읽는다.
+const MOBILE_SCHEME = 'zonemate://auth-callback';
 
 function setSessionCookie(res, userId) {
   res.cookie('token', issueToken(userId), {
@@ -109,7 +112,9 @@ router.post('/email/verify', (req, res) => {
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user) });
+  // 쿠키(웹/데스크톱)에 더해 토큰을 응답 본문에도 실어준다 — 모바일 앱은
+  // 쿠키 대신 이 값을 저장했다가 Authorization 헤더로 보낸다.
+  res.json({ user: toPublicUser(user), token: issueToken(user.id) });
 });
 
 router.post('/login', (req, res) => {
@@ -119,10 +124,13 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않아요' });
   }
   setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user) });
+  res.json({ user: toPublicUser(user), token: issueToken(user.id) });
 });
 
 // ---- 구글 로그인 ----
+// state에 플랫폼을 실어 보내고 콜백에서 그대로 돌려받는다(OAuth 표준
+// 파라미터라 구글/카카오 둘 다 그대로 echo해준다) — 모바일에서 시작한
+// 로그인인지 구분해서, 콜백에서 웹 프론트 대신 앱 딥링크로 보내기 위함.
 
 router.get('/google', (req, res) => {
   const params = new URLSearchParams({
@@ -131,6 +139,7 @@ router.get('/google', (req, res) => {
     response_type: 'code',
     scope: 'openid email profile',
     prompt: 'select_account',
+    ...(req.query.platform === 'mobile' ? { state: 'mobile' } : {}),
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
@@ -161,9 +170,14 @@ router.get('/google/callback', async (req, res) => {
 
     const user = upsertOAuthUser({ provider: 'google', providerId: profile.sub, email: profile.email });
     setSessionCookie(res, user.id);
+    if (req.query.state === 'mobile') {
+      const token = issueToken(user.id);
+      return res.redirect(`${MOBILE_SCHEME}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
+    }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
     console.error(err);
+    if (req.query.state === 'mobile') return res.redirect(`${MOBILE_SCHEME}?error=google`);
     res.redirect(`${APP_URL}/login?error=google`);
   }
 });
@@ -175,6 +189,7 @@ router.get('/kakao', (req, res) => {
     client_id: process.env.KAKAO_REST_API_KEY,
     redirect_uri: `${API_URL}/api/auth/kakao/callback`,
     response_type: 'code',
+    ...(req.query.platform === 'mobile' ? { state: 'mobile' } : {}),
   });
   res.redirect(`https://kauth.kakao.com/oauth/authorize?${params}`);
 });
@@ -206,9 +221,14 @@ router.get('/kakao/callback', async (req, res) => {
 
     const user = upsertOAuthUser({ provider: 'kakao', providerId: String(profile.id), email });
     setSessionCookie(res, user.id);
+    if (req.query.state === 'mobile') {
+      const authToken = issueToken(user.id);
+      return res.redirect(`${MOBILE_SCHEME}?token=${authToken}&nickname=${encodeURIComponent(user.nickname || '')}`);
+    }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
     console.error(err);
+    if (req.query.state === 'mobile') return res.redirect(`${MOBILE_SCHEME}?error=kakao`);
     res.redirect(`${APP_URL}/login?error=kakao`);
   }
 });
