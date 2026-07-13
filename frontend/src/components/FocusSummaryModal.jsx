@@ -15,7 +15,7 @@ function stateColor(state) {
   return 'var(--line)';
 }
 
-function FocusGraph({ timeline, totalElapsedMs }) {
+export function FocusGraph({ timeline, totalElapsedMs }) {
   const width = 720;
   const height = 230;
   const left = 42;

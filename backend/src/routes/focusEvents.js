@@ -68,7 +68,7 @@ router.get('/day/:date', (req, res) => {
   const starts = db.prepare(`
     SELECT session_id, occurred_at, meta_json
     FROM focus_events
-    WHERE type = 'session_start' AND date(occurred_at, 'localtime') = ?
+    WHERE type = 'session_start' AND date(occurred_at) = ?
     ORDER BY occurred_at ASC
   `).all(date);
 
@@ -105,6 +105,11 @@ router.get('/day/:date', (req, res) => {
       totalDriftMs: endMeta?.totalDriftMs ?? null,
       totalBreakMs: endMeta?.totalBreakMs ?? null,
       driftCount,
+      averageFocusMs: endMeta?.averageFocusMs ?? null,
+      focusSegmentCount: endMeta?.focusSegmentCount ?? null,
+      focusRate: endMeta?.focusRate ?? null,
+      totalElapsedMs: endMeta?.totalElapsedMs ?? null,
+      timeline: Array.isArray(endMeta?.timeline) ? endMeta.timeline : [],
     };
   });
 

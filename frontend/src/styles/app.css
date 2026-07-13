@@ -682,6 +682,10 @@ input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
 .focus-log-stat.tone-focus { color: var(--signal); }
 .focus-log-stat.tone-break { color: var(--noise); }
 .focus-log-stat.tone-drift { color: var(--urgent); }
+.focus-log-graph-toggle { margin-top: 10px; }
+.focus-log-graph { margin-top: 8px; }
+.focus-log-graph .focus-summary-chart-wrap { background: var(--surface); }
+.focus-log-graph .focus-summary-chart { min-height: 130px; }
 
 /* ==== 집중 세션 종료 요약 ==== */
 .focus-summary-modal {

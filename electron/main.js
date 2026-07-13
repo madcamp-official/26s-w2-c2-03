@@ -656,6 +656,9 @@ function recordFocusTimeline(now = Date.now(), force = false) {
   };
   if (last && last.at === now) focusSession.timeline[focusSession.timeline.length - 1] = point;
   else focusSession.timeline.push(point);
+  if (focusSession.timeline.length > 1000) {
+    focusSession.timeline = focusSession.timeline.filter((_, index) => index % 2 === 0);
+  }
 }
 
 function buildFocusSnapshot() {
@@ -1166,6 +1169,9 @@ function stopFocusSession() {
     driftCount: focusSession.driftCount,
     averageFocusMs,
     focusSegmentCount: focusSession.focusSegmentCount,
+    focusRate: focusSession.lastCompletedSummary.focusRate,
+    totalElapsedMs: focusSession.lastCompletedSummary.totalElapsedMs,
+    timeline: focusSession.lastCompletedSummary.timeline,
   });
 
   stopOsTracker(); // 집중 세션 끝나면 키/마우스 수집도 중단

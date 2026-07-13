@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchDailyArchive, saveDailyArchive, fetchFocusDay } from '../api.js';
 import { toLocalInputValue } from '../utils/calendarGrid.js';
 import DayWheel from './DayWheel.jsx';
+import { FocusGraph } from './FocusSummaryModal.jsx';
 
 let idCounter = 1;
 function makeTaskId() {
@@ -9,7 +10,8 @@ function makeTaskId() {
 }
 
 function formatDur(ms) {
-  if (ms == null) return '—';
+  if (ms == null) return '-';
+  if (ms < 60000) return `${Math.max(0, Math.round(ms / 1000))}초`;
   const totalMin = Math.round(ms / 60000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
@@ -46,6 +48,7 @@ export default function DatePlanEditor({
   const [savedFlash, setSavedFlash] = useState(false);
   const [showWheel, setShowWheel] = useState(false);
   const [focusSessions, setFocusSessions] = useState(null); // 이 날의 집중 세션 기록
+  const [expandedFocusSessionId, setExpandedFocusSessionId] = useState(null);
   const saveTimerRef = useRef(null);
   const dayEndRef = useRef(null);
 
@@ -242,12 +245,38 @@ export default function DatePlanEditor({
                       <div className="focus-log-apps">{s.focusApps.join(', ')}</div>
                     )}
                     {s.completed ? (
-                      <div className="focus-log-stats">
-                        <span className="focus-log-stat tone-focus num">집중 {formatDur(s.totalFocusMs)}</span>
-                        <span className="focus-log-stat tone-break num">휴식 {formatDur(s.totalBreakMs)}</span>
-                        <span className="focus-log-stat tone-drift num">딴짓 {formatDur(s.totalDriftMs)}</span>
-                        <span className="focus-log-stat num">벗어남 {s.driftCount}회</span>
-                      </div>
+                      <>
+                        <div className="focus-log-stats">
+                          <span className="focus-log-stat tone-focus num">집중 {formatDur(s.totalFocusMs)}</span>
+                          <span className="focus-log-stat tone-break num">휴식 {formatDur(s.totalBreakMs)}</span>
+                          <span className="focus-log-stat tone-drift num">딴짓 {formatDur(s.totalDriftMs)}</span>
+                          <span className="focus-log-stat num">벗어남 {s.driftCount}회</span>
+                          {s.averageFocusMs != null && (
+                            <span className="focus-log-stat tone-focus num">평균 집중 {formatDur(s.averageFocusMs)}</span>
+                          )}
+                          {s.focusRate != null && (
+                            <span className="focus-log-stat num">집중률 {s.focusRate}%</span>
+                          )}
+                        </div>
+                        {(s.timeline || []).length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-link focus-log-graph-toggle"
+                              onClick={() => setExpandedFocusSessionId((current) => (
+                                current === s.sessionId ? null : s.sessionId
+                              ))}
+                            >
+                              {expandedFocusSessionId === s.sessionId ? '그래프 접기' : '집중 그래프 보기'}
+                            </button>
+                            {expandedFocusSessionId === s.sessionId && (
+                              <div className="focus-log-graph">
+                                <FocusGraph timeline={s.timeline} totalElapsedMs={s.totalElapsedMs} />
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
                     ) : (
                       <div className="focus-log-stats"><span className="focus-log-stat">아직 끝나지 않은 세션이에요</span></div>
                     )}
