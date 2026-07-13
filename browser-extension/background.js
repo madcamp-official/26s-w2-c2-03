@@ -1,4 +1,7 @@
-const BACKEND_URL = 'http://localhost:4000/api/metrics';
+// 백엔드가 로컬(localhost:4000)에서 Railway로 옮겨가면서 이 주소도 같이
+// 옮겨야 한다 — 안 그러면 확장이 아무 데도 데이터를 못 보내고 조용히 큐만
+// 쌓는다. 로컬 백엔드로 다시 테스트하려면 이 줄만 바꾸면 된다.
+const BACKEND_URL = 'https://26s-w2-c2-03-production.up.railway.app/api/metrics';
 const MAX_PENDING_EVENTS = 500;
 
 let lastTabSignature = null;

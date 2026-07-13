@@ -17,12 +17,22 @@ const PAGE_PRODUCTIVITY_SCHEMA = {
   required: ['classification'],
 };
 
-export async function classifyPageProductivity({windowTitle, taskTitle }) {
+// url/title은 브라우저 확장이 보고한 실제 탭 정보(있으면 가장 정확),
+// windowTitle은 OS 레벨 활성 창 제목(확장 미설치 시의 폴백)이다. 예전엔
+// url/title을 인자로만 받고 실제로는 안 써서(윈도우 제목만 봄) 쇼츠/영상
+// 제목·플랫폼 구분이 부정확했다 — 이제 URL 경로까지 근거로 준다.
+export async function classifyPageProductivity({ url, title, windowTitle, taskTitle }) {
+  const evidence = [
+    url ? `URL: ${url}` : null,
+    title ? `Page title: ${title}` : null,
+    windowTitle ? `Window title: ${windowTitle}` : null,
+  ].filter(Boolean).join('\n') || '(no page info available)';
+
   const response = await genAI.models.generateContent({
     model: MODEL,
-    contents: `Current task: ${taskTitle}\nActive window title: ${windowTitle || '(none)'}\n`,
+    contents: `Current task: ${taskTitle}\n${evidence}\n`,
     config: {
-      systemInstruction: 'Classify whether the current web page is directly useful for completing the current task. Use the active window title as available evidence. Use related only for a clear direct connection, unrelated for a clear lack of connection, and uncertain when the available evidence is insufficient.',
+      systemInstruction: 'Classify whether the current web page is directly useful for completing the current task. Use the URL, page title, and window title as available evidence — infer the platform (e.g. YouTube, Instagram, TikTok, X/Twitter, Netflix) and content type (e.g. short-form video/reel/shorts vs. a long-form video, article, documentation, code repository) from the URL path and title when possible. Use related only for a clear direct connection, unrelated for a clear lack of connection (e.g. short-form or entertainment video unrelated to the task), and uncertain when the available evidence is insufficient.',
       responseMimeType: 'application/json',
       responseSchema: PAGE_PRODUCTIVITY_SCHEMA,
       maxOutputTokens: 60,

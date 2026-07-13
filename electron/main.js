@@ -351,13 +351,9 @@ function activateFocusApps() {
 // "집중 멈추기"는 idle로 완전히 돌아가는 것이고, "휴식하기"는 세션을 끝내지
 // 않은 채 잠깐 멈추는 것 — 이 둘을 구분해달라는 요청 반영.
 
-// 테스트 편의를 위해 임계값을 아주 짧게(6초) 잡아둔다. 실제 배포에서는
-// 30초~수 분 수준으로 올린다.
-const DRIFT_ALERT_MS = 6 * 1000;
+const DRIFT_ALERT_MS = 30 * 1000;
 const SNOOZE_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 2000;
-// URL 없이 windowTitle로 판단한 "현재 집중중인가요?" 알림의 최소 표시 시간.
-const WINDOW_TITLE_ALERT_VISIBLE_MS = 15 * 1000;
 const BROADCAST_INTERVAL_MS = 1000;
 // ---- 집중력 게이지 튜닝 포인트 ----
 // 게이지(0~100)는 활성 창이 아니라 키보드/마우스 활동으로 움직인다.
@@ -448,10 +444,60 @@ const focusSession = {
   underfocusSnoozedUntil: 0,
   lastPageSignature: null,
   classifyingPage: false,
+  // ---- 브라우저 탭 관련성 판정 캐시 ----
+  // classifyCurrentBrowserPage()가 비동기로 채우고, pollFocus()가 동기로
+  // 읽는다. pageWindowTitle이 "지금 활성 창 제목"과 같을 때만 pageClassification을
+  // 신뢰한다 — 탭을 막 바꿔서 아직 재판정 전이면(제목 불일치) 이탈로 오판하지
+  // 않고 그대로 집중으로 취급한다(모르면 이탈로 단정하지 않는다는 원칙).
+  pageWindowTitle: null,
+  pageClassification: null, // 'related' | 'unrelated' | 'uncertain' | null
+  pageLabel: null, // 알림에 보여줄 사람이 읽기 좋은 페이지 이름
 };
 
+// URL/제목만으로 플랫폼·콘텐츠 종류를 규칙 기반으로 알아낸다(LLM 호출 없이
+// 즉시 계산 — 알림 문구에 쓸 라벨은 매 tick 필요할 수 있어 지연이 있으면 안 됨).
+// "관련 있는지"는 LLM(classifyPageProductivity)이 판단하고, 이 함수는 오직
+// "뭐라고 부를지"만 담당한다.
+function describeBrowserPage(url, title, windowTitle) {
+  const cleanTitle = (raw, suffixPattern) => {
+    if (!raw) return null;
+    const stripped = suffixPattern ? raw.replace(suffixPattern, '').trim() : raw.trim();
+    return stripped || null;
+  };
+
+  if (url) {
+    try {
+      const { hostname, pathname } = new URL(url);
+      const host = hostname.replace(/^www\./, '');
+      if (/(^|\.)youtube\.com$/.test(host) || host === 'youtu.be') {
+        if (pathname.startsWith('/shorts/')) return '유튜브 쇼츠';
+        const t = cleanTitle(title, / - YouTube$/);
+        return t ? `유튜브: ${t}` : '유튜브';
+      }
+      if (/(^|\.)instagram\.com$/.test(host)) {
+        if (pathname.startsWith('/reel')) return '인스타그램 릴스';
+        return '인스타그램';
+      }
+      if (/(^|\.)tiktok\.com$/.test(host)) return '틱톡';
+      if (/(^|\.)(twitter\.com|x\.com)$/.test(host)) return 'X(트위터)';
+      if (/(^|\.)netflix\.com$/.test(host)) {
+        const t = cleanTitle(title, / - Netflix$/);
+        return t ? `넷플릭스: ${t}` : '넷플릭스';
+      }
+      if (/(^|\.)twitch\.tv$/.test(host)) return '트위치';
+      // 그 외 사이트: 제목에서 흔한 " - 사이트명" 꼬리표를 떼고, 없으면
+      // 도메인 이름을 그대로 보여준다.
+      const t = cleanTitle(title, / [-|·] [^-|·]{1,30}$/);
+      return t || host;
+    } catch {
+      // URL 파싱 실패 시 아래 windowTitle 폴백으로
+    }
+  }
+  return title || windowTitle || '다른 페이지';
+}
+
 async function classifyCurrentBrowserPage(windowTitle = null) {
-  if (focusSession.status !== 'focusing' || !focusSession.taskTitle || focusSession.classifyingPage || alertWindow) return;
+  if (focusSession.status !== 'focusing' || !focusSession.taskTitle || focusSession.classifyingPage) return;
 
   const sessionId = focusSession.id;
   const taskTitle = focusSession.taskTitle;
@@ -482,23 +528,13 @@ async function classifyCurrentBrowserPage(windowTitle = null) {
       focusSession.status !== 'focusing'
       || focusSession.id !== sessionId
       || focusSession.taskTitle !== taskTitle
-      || alertWindow
     ) return;
     focusSession.lastPageSignature = signature;
-    if (classification === 'related') return;
-
-    showFocusAlert({
-      type: 'focus_confirm',
-      source: url ? 'url' : 'windowTitle',
-      title: '현재 집중중인가요?',
-      message: classification === 'unrelated'
-        ? '현재 페이지가 진행 중인 작업과 직접 관련 없어 보여요.'
-        : '현재 페이지와 진행 중인 작업의 관련성을 판단하기 어려워요.',
-      actions: [
-        { id: 'page_focus_yes', label: '네', primary: true },
-        { id: 'page_focus_no', label: '아니요' },
-      ],
-    });
+    // pollFocus가 동기로 읽어서 이탈 여부를 override할 캐시. windowTitle을
+    // 키로 남겨서, 탭이 이미 바뀐 뒤(재판정 전)에는 이 값을 안 쓰게 한다.
+    focusSession.pageWindowTitle = windowTitle;
+    focusSession.pageClassification = classification;
+    focusSession.pageLabel = describeBrowserPage(url, title, windowTitle);
   } catch (err) {
     console.error('[electron] page classification failed:', err.message);
   } finally {
@@ -917,11 +953,29 @@ async function pollFocus() {
       return;
     }
 
-    const onFocusApp = activeApp && focusSession.focusAppIds.has(activeApp.appId);
+    let onFocusApp = activeApp && focusSession.focusAppIds.has(activeApp.appId);
     const now = Date.now();
+    const activeWindowTitle = info?.title || null;
+    const isBrowser = activeApp && /chrome|edge|firefox|safari|brave|opera|vivaldi|arc/i.test(activeApp.name);
 
-    if (activeApp && /chrome|edge|firefox|safari|brave|opera|vivaldi|arc/i.test(activeApp.name)) {
-      void classifyCurrentBrowserPage(info?.title || null);
+    if (isBrowser) {
+      void classifyCurrentBrowserPage(activeWindowTitle);
+    }
+
+    // 브라우저가 집중 대상 앱으로 선택돼 있어도, 지금 보는 탭이 작업과
+    // 무관하다고 LLM이 판정했으면(캐시가 지금 창 제목 기준으로 신선할 때만)
+    // 다른 앱을 켠 것과 동일하게 이탈로 취급한다 — "허용한 앱이지만 관련
+    // 없는 탭"까지 걸러내는 게 이 기능의 핵심이라 앱 단위 판정만으론 부족.
+    // 아직 재판정 전(탭을 막 바꿔서 캐시가 이전 제목 기준)이면 이탈로
+    // 단정하지 않고 그대로 집중으로 둔다.
+    let pageDriftLabel = null;
+    if (
+      onFocusApp && isBrowser
+      && focusSession.pageWindowTitle === activeWindowTitle
+      && focusSession.pageClassification === 'unrelated'
+    ) {
+      onFocusApp = false;
+      pageDriftLabel = focusSession.pageLabel || '관련 없는 페이지';
     }
 
     if (onFocusApp) {
@@ -960,12 +1014,7 @@ async function pollFocus() {
       focusSession.lastFocusApp = activeApp;
       focusSession.driftStartedAt = null;
       focusSession.driftAppName = null;
-      if (alertWindow && !alertWindow.isDestroyed()) {
-        const isProtectedWindowTitleAlert = alertWindow.zonemateAlertType === 'focus_confirm'
-          && alertWindow.zonemateAlertSource === 'windowTitle'
-          && now - alertWindow.zonemateAlertShownAt < WINDOW_TITLE_ALERT_VISIBLE_MS;
-        if (!isProtectedWindowTitleAlert) alertWindow.close();
-      }
+      if (alertWindow && !alertWindow.isDestroyed()) alertWindow.close();
       return;
     }
 
@@ -973,9 +1022,12 @@ async function pollFocus() {
     updateGauge('fall'); // 이탈 중 → 입력 있어도 게이지 하강
     if (!focusSession.driftStartedAt) {
       focusSession.driftStartedAt = now;
-      focusSession.driftAppName = info?.owner?.name || '다른 창';
+      // 브라우저의 관련 없는 탭 때문에 이탈로 판정된 경우엔 앱 이름("Chrome")
+      // 대신 그 페이지가 뭔지(pageDriftLabel, 예: "유튜브 쇼츠")를 보여준다 —
+      // 안 그러면 "허용한 브라우저에서 벗어났어요"처럼 앞뒤가 안 맞게 뜬다.
+      focusSession.driftAppName = pageDriftLabel || info?.owner?.name || '다른 창';
       focusSession.driftCount += 1;
-      logFocusEvent('drift_start', { toApp: focusSession.driftAppName });
+      logFocusEvent('drift_start', { toApp: focusSession.driftAppName, viaPageClassification: Boolean(pageDriftLabel) });
     }
 
     const driftMs = now - focusSession.driftStartedAt;
@@ -1014,6 +1066,12 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.ignoredCurrentDrift = false;
   focusSession.pendingReturnApp = null;
   focusSession.lastFocusApp = focusApps[0] || null;
+  // 이전 세션(다른 작업)의 페이지 관련성 캐시가 새 세션에 잘못 적용되지
+  // 않도록 초기화.
+  focusSession.lastPageSignature = null;
+  focusSession.pageWindowTitle = null;
+  focusSession.pageClassification = null;
+  focusSession.pageLabel = null;
 
   // 통계 초기화 — 새 세션 시작이므로 게이지도 만점에서 출발한다.
   focusSession.sessionStartedAt = now;
@@ -1195,11 +1253,6 @@ ipcMain.on('alert-action', (event, action) => {
   logFocusEvent('alert_action', action);
 
   const win = BrowserWindow.fromWebContents(event.sender);
-
-  if (action.actionId === 'page_focus_yes' || action.actionId === 'page_focus_no') {
-    if (win && !win.isDestroyed()) win.close();
-    return;
-  }
 
   if (action.actionId === 'return') {
     // 알림 창을 먼저 닫고(닫으면 macOS가 직전 활성 앱=딴짓하던 앱으로 포커스를
