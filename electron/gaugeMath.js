@@ -19,6 +19,38 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+function resolveGaugeActivity({
+  mode,
+  inputAt,
+  inputScore,
+  now,
+  systemIdleSeconds,
+  trackerGraceMs = 7000,
+  systemIdleThresholdSeconds = 4,
+}) {
+  if (mode !== 'active') return { active: false, intensity: 1, source: mode };
+
+  // tracker가 실제 입력 시각을 한 번 제공했다면 그 값을 기준으로만 판단한다.
+  // 오래된 점수 뒤에 OS idle로 되돌아가면 터치패드 미세 움직임 같은 신호가
+  // 활동으로 잡혀 사용자가 손을 떼어도 게이지가 계속 오를 수 있다.
+  if (Number.isFinite(inputAt)) {
+    const age = now - inputAt;
+    const active = age >= 0 && age < trackerGraceMs;
+    const score = Number.isFinite(inputScore) ? inputScore : 0;
+    return {
+      active,
+      intensity: active ? Math.max(0.2, score / 100) : 1,
+      source: 'tracker',
+    };
+  }
+
+  return {
+    active: systemIdleSeconds < systemIdleThresholdSeconds,
+    intensity: 1,
+    source: 'system-idle',
+  };
+}
+
 /**
  * 게이지 상태 한 tick 전개.
  * @param {{gauge:number, activeStreak:number, idleStreak:number}} state
@@ -46,4 +78,4 @@ function nextGauge(state, active, cfg = GAUGE_MOMENTUM, intensity = 1) {
   return { gauge, activeStreak, idleStreak, step };
 }
 
-module.exports = { nextGauge, GAUGE_MOMENTUM, clamp };
+module.exports = { nextGauge, resolveGaugeActivity, GAUGE_MOMENTUM, clamp };

@@ -4,7 +4,7 @@ const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const http = require('node:http');
 const fs = require('node:fs');
-const { nextGauge } = require('./gaugeMath');
+const { nextGauge, resolveGaugeActivity } = require('./gaugeMath');
 
 // Windows Squirrel 인스톨러 전용 처리. 이 모듈은 패키징 빌드에만 필요하고
 // macOS/개발 환경에는 없을 수 있어서, 없으면 조용히 건너뛴다(없다고 앱이
@@ -328,10 +328,12 @@ const BROADCAST_INTERVAL_MS = 1000;
 // (창 분류는 집중/이탈 상태·알림·통계 쪽에서 계속 쓴다.)
 const GAUGE_ACTIVE_IDLE_SEC = 4; // 이 초 미만 유휴면 "활발히 입력 중"으로 본다
 // os-tracker(키/마우스 패턴)를 쓸 때: 이 clientId로 spawn하고 백엔드 focus-state를 폴링한다.
-// lastEventAt이 이 시간 안이면 "신선"으로 보고 패턴 점수로 게이지 상승폭을 조절, 아니면
-// powerMonitor.getSystemIdleTime() 폴백(os-tracker 미설치/권한없음/미실행 시).
+// tracker 입력을 한 번이라도 받으면 lastEventAt으로 활동 여부를 판정하고, tracker 정보가
+// 전혀 없을 때만 powerMonitor.getSystemIdleTime()을 폴백으로 사용한다.
 const OS_TRACKER_CLIENT_ID = 'zonemate-desktop';
-const INPUT_FRESH_MS = 10 * 1000;
+// os-tracker는 5초마다 묶어서 보내므로 2초의 전송 여유를 둔다. 마지막 실제
+// 클릭/키 입력 후 이 시간이 지나면 최근 60초 점수가 남아 있어도 유휴로 본다.
+const INPUT_ACTIVE_GRACE_MS = 7 * 1000;
 // 게이지 기반 알림: 게이지가 이 값 미만으로 아래 시간 이상 지속되면 "손이 멈췄어요" 알림
 const GAUGE_LOW_THRESHOLD = 25;
 const GAUGE_LOW_ALERT_MS = 3 * 60 * 1000;
@@ -765,19 +767,15 @@ function stopOsTracker() {
 //   - 'hold'(자기 창=Zonemate 보는 중): 유지(올리지도 내리지도 않음).
 function updateGauge(mode) {
   if (mode === 'hold') return;
-  let active = false;
-  let intensity = 1;
-  if (mode === 'active') {
-    const now = Date.now();
-    const fresh = focusSession.inputAt != null && now - focusSession.inputAt < INPUT_FRESH_MS;
-    if (fresh) {
-      active = focusSession.inputScore > 0;
-      // 활동이 있으면 최소 0.2는 보장(아주 산발적이어도 조금은 오르게), 최대 1.
-      intensity = active ? Math.max(0.2, focusSession.inputScore / 100) : 1;
-    } else {
-      active = powerMonitor.getSystemIdleTime() < GAUGE_ACTIVE_IDLE_SEC;
-    }
-  }
+  const { active, intensity } = resolveGaugeActivity({
+    mode,
+    inputAt: focusSession.inputAt,
+    inputScore: focusSession.inputScore,
+    now: Date.now(),
+    systemIdleSeconds: powerMonitor.getSystemIdleTime(),
+    trackerGraceMs: INPUT_ACTIVE_GRACE_MS,
+    systemIdleThresholdSeconds: GAUGE_ACTIVE_IDLE_SEC,
+  });
   // mode === 'fall' 이면 active=false 유지 → 하강.
   const next = nextGauge(
     {

@@ -1,6 +1,6 @@
 // gaugeMath 순수 산식 검증. 실행: node gaugeMath.test.js
 const assert = require('node:assert');
-const { nextGauge } = require('./gaugeMath');
+const { nextGauge, resolveGaugeActivity } = require('./gaugeMath');
 
 function run(startGauge, activePattern) {
   let s = { gauge: startGauge, activeStreak: 0, idleStreak: 0 };
@@ -57,6 +57,31 @@ function run(startGauge, activePattern) {
   const dropFull = nextGauge({ gauge: 50, activeStreak: 0, idleStreak: 0 }, false, undefined, 1).step;
   const dropLow = nextGauge({ gauge: 50, activeStreak: 0, idleStreak: 0 }, false, undefined, 0.2).step;
   assert.strictEqual(dropFull, dropLow, '하강폭은 intensity와 무관');
+}
+
+// 7) tracker가 연결된 뒤에는 마지막 실제 입력 시각으로 활동 종료를 결정한다.
+{
+  const now = 100_000;
+  const recent = resolveGaugeActivity({
+    mode: 'active', inputAt: now - 6000, inputScore: 50, now, systemIdleSeconds: 0,
+  });
+  assert.strictEqual(recent.active, true);
+  assert.strictEqual(recent.source, 'tracker');
+
+  const stale = resolveGaugeActivity({
+    mode: 'active', inputAt: now - 8000, inputScore: 80, now, systemIdleSeconds: 0,
+  });
+  assert.strictEqual(stale.active, false, '입력이 오래됐으면 OS 미세 움직임과 무관하게 비활성');
+
+  const fallbackActive = resolveGaugeActivity({
+    mode: 'active', inputAt: null, inputScore: 0, now, systemIdleSeconds: 2,
+  });
+  assert.strictEqual(fallbackActive.active, true, 'tracker 정보가 없을 때만 OS idle 폴백');
+
+  const fallbackIdle = resolveGaugeActivity({
+    mode: 'active', inputAt: null, inputScore: 0, now, systemIdleSeconds: 8,
+  });
+  assert.strictEqual(fallbackIdle.active, false);
 }
 
 console.log('gaugeMath.test.js: 모든 검증 통과 ✅');
