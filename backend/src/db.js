@@ -93,6 +93,27 @@ db.exec(`
     meta_json TEXT
   );
 
+  -- 기기 연동: PC에서 발급한 짧은 코드를 폰이 입력해서 같은 계정에 기기로
+  -- 등록한다. 코드는 3분 뒤 만료되고 한 번 쓰면 재사용 불가.
+  CREATE TABLE IF NOT EXISTS pairing_codes (
+    code TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS devices (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    platform TEXT, -- 'ios' | 'android' | 'desktop-mac' | 'desktop-windows' 등
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_planner_tasks_user_order
     ON planner_tasks(user_id, sort_order);
 
@@ -101,6 +122,12 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_focus_events_session
     ON focus_events(session_id, occurred_at);
+
+  CREATE INDEX IF NOT EXISTS idx_pairing_codes_user
+    ON pairing_codes(user_id);
+
+  CREATE INDEX IF NOT EXISTS idx_devices_user
+    ON devices(user_id);
 `);
 
 // planner_tasks에 start_time/source_event_id 컬럼을 나중에 추가했다 —

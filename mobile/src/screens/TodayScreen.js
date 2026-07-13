@@ -3,8 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 
-// 1단계(뼈대+로그인) 자리 표시 화면. 캘린더/오늘의 계획은 2단계에서 채운다.
-export default function TodayScreen() {
+// 1단계(뼈대+로그인+기기연동) 자리 표시 화면. 캘린더/오늘의 계획은 2단계에서 채운다.
+export default function TodayScreen({ navigation }) {
   const { user, logout } = useAuth();
 
   return (
@@ -20,6 +20,9 @@ export default function TodayScreen() {
       <View style={styles.body}>
         <Text style={styles.greeting}>{user?.nickname}님, 로그인 성공!</Text>
         <Text style={styles.hint}>오늘의 계획·캘린더 화면은 다음 단계에서 이어서 만듭니다.</Text>
+        <Pressable style={styles.pairButton} onPress={() => navigation.navigate('DevicePairing')}>
+          <Text style={styles.pairButtonLabel}>PC와 기기 연동하기</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -36,4 +39,9 @@ const styles = StyleSheet.create({
   body: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 8 },
   greeting: { fontSize: 17, fontWeight: '700', color: colors.text1 },
   hint: { fontSize: 13, color: colors.text2, textAlign: 'center' },
+  pairButton: {
+    marginTop: 8, backgroundColor: colors.surface2, borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: colors.line,
+  },
+  pairButtonLabel: { color: colors.text1, fontWeight: '600', fontSize: 13.5 },
 });

@@ -19,6 +19,7 @@ import plannerDataRouter from './routes/plannerData.js';
 import dailyArchiveRouter from './routes/dailyArchive.js';
 import metricsRouter from './routes/metrics.js';
 import focusEventsRouter from './routes/focusEvents.js';
+import devicesRouter from './routes/devices.js';
 
 const app = express();
 app.use(cors({ origin: process.env.APP_BASE_URL || 'http://localhost:5173', credentials: true }));
@@ -36,6 +37,7 @@ app.use('/api/planner-data', plannerDataRouter);
 app.use('/api/daily-archives', dailyArchiveRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/focus-events', focusEventsRouter);
+app.use('/api/devices', devicesRouter);
 
 // 패키징된 앱/Railway에서는 백엔드가 프론트엔드 정적 빌드도 같은 오리진에서
 // 서빙한다. 개발 중에는 Vite dev 서버(:5173)를 쓰므로 FRONTEND_DIST_DIR이

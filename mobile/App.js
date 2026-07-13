@@ -9,6 +9,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import NicknameScreen from './src/screens/NicknameScreen';
 import TodayScreen from './src/screens/TodayScreen';
+import DevicePairingScreen from './src/screens/DevicePairingScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -35,7 +36,10 @@ function RootNavigator() {
       ) : !user.nickname ? (
         <Stack.Screen name="Nickname" component={NicknameScreen} />
       ) : (
-        <Stack.Screen name="Today" component={TodayScreen} />
+        <>
+          <Stack.Screen name="Today" component={TodayScreen} />
+          <Stack.Screen name="DevicePairing" component={DevicePairingScreen} options={{ headerShown: true, title: '기기 연동' }} />
+        </>
       )}
     </Stack.Navigator>
   );

@@ -32,5 +32,10 @@ export const setNickname = (nickname) => request('/api/auth/nickname', { method:
 export const kakaoLoginUrl = () => `${API_BASE_URL}/api/auth/kakao?platform=mobile`;
 export const googleLoginUrl = () => `${API_BASE_URL}/api/auth/google?platform=mobile`;
 
+// ---- 기기 연동 ----
+export const pairDevice = ({ code, name, platform }) => request('/api/devices/pair', { method: 'POST', body: { code, name, platform } });
+export const fetchDevices = () => request('/api/devices');
+export const removeDevice = (id) => request(`/api/devices/${id}`, { method: 'DELETE' });
+
 // ---- 오늘의 계획 / 캘린더 (2단계에서 화면과 함께 채울 자리) ----
 export const fetchPlannerData = () => request('/api/planner-data');
