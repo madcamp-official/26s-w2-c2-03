@@ -1,3 +1,9 @@
+// 서비스 전체 시간을 사용자 기준(현재는 서울/KST)으로 통일한다. 다른 어떤
+// 모듈보다 먼저 TZ를 고정해야 메인 프로세스·렌더러(Chromium)·자식 백엔드가
+// 모두 같은 타임존으로 시간을 계산한다. 나중에 사용자 국가를 받게 되면 이
+// 값을 그 국가 타임존으로 바꾸면 된다.
+process.env.TZ = process.env.TZ || 'Asia/Seoul';
+
 const {
   app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor,
   systemPreferences, desktopCapturer, dialog, shell,

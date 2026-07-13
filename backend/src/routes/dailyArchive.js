@@ -77,7 +77,7 @@ router.put('/:date', (req, res) => {
   try {
     db.prepare(`
       INSERT INTO daily_archives (user_id, date, tasks_json, archived_at, day_end_time)
-      VALUES (?, ?, ?, datetime('now'), ?)
+      VALUES (?, ?, ?, datetime('now', 'localtime'), ?)
       ON CONFLICT(user_id, date) DO UPDATE SET
         tasks_json = excluded.tasks_json,
         archived_at = excluded.archived_at,
@@ -115,7 +115,7 @@ router.post('/close-day', (req, res) => {
 
     db.prepare(`
       INSERT INTO daily_archives (user_id, date, tasks_json, archived_at, day_end_time)
-      VALUES (?, ?, ?, datetime('now'), ?)
+      VALUES (?, ?, ?, datetime('now', 'localtime'), ?)
       ON CONFLICT(user_id, date) DO UPDATE SET
         tasks_json = excluded.tasks_json,
         archived_at = excluded.archived_at,
