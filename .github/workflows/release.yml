@@ -36,11 +36,14 @@ jobs:
       - name: Build frontend + stage resources
         working-directory: electron
         run: npm run build:resources
-      - name: Publish macOS (universal) to GitHub Release (auto-publish)
+      # universal 빌드는 네이티브 모듈(get-windows) 때문에 arm64/x64 mach-o 개수가
+      # 안 맞아 stitching이 실패한다. Apple Silicon 대상 arm64로 빌드한다.
+      # (Intel Mac도 지원하려면 아래에 --arch=x64 publish 스텝을 추가하면 된다.)
+      - name: Publish macOS (arm64) to GitHub Release (auto-publish)
         working-directory: electron
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-forge publish --arch=universal
+        run: npx electron-forge publish --arch=arm64
 
   release-windows:
     runs-on: windows-latest
