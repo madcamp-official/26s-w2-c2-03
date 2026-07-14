@@ -42,6 +42,7 @@ export default function DatePlanEditor({
   onClose,
 }) {
   const [archiveTasks, setArchiveTasks] = useState(null); // null=로딩중(오늘이 아닐 때만)
+  const [dayClosed, setDayClosed] = useState(false); // 이 날짜에 하루 마감 아카이브가 있는지
   const [dayEndTime, setDayEndTime] = useState(null);
   const [loading, setLoading] = useState(!isToday);
   const [error, setError] = useState(null);
@@ -63,26 +64,30 @@ export default function DatePlanEditor({
     };
   }, [date]);
 
-  // 오늘이 아닌 날짜는 저장된 계획을 불러온다.
+  // 저장된 계획(아카이브)을 불러온다. 과거 날짜는 물론, 오늘이라도 하루 마감이
+  // 끝나 아카이브가 생겼으면(dayClosed) 그 기록을 보여주기 위해 항상 조회한다.
+  // 오늘 아직 미마감이면 아카이브가 없어(tasks=null) 라이브 목록을 그대로 쓴다.
   useEffect(() => {
-    if (isToday) return undefined;
     let cancelled = false;
-    setLoading(true);
+    if (!isToday) setLoading(true);
     fetchDailyArchive(date)
       .then((data) => {
         if (cancelled) return;
+        setDayClosed(data.tasks != null);
         setArchiveTasks(withOrder(data.tasks || []));
         setDayEndTime(data.dayEndTime || null);
         dayEndRef.current = data.dayEndTime || null;
       })
-      .catch((err) => !cancelled && setError(err.message || '불러오지 못했어요'))
-      .finally(() => !cancelled && setLoading(false));
+      .catch((err) => { if (!cancelled && !isToday) setError(err.message || '불러오지 못했어요'); })
+      .finally(() => { if (!cancelled && !isToday) setLoading(false); });
     return () => {
       cancelled = true;
     };
   }, [date, isToday]);
 
-  const items = isToday ? (liveTasks || []) : (archiveTasks || []);
+  // 오늘이라도 마감돼 아카이브가 있으면 아카이브를, 아니면 라이브 목록을 쓴다.
+  const useArchive = !isToday || dayClosed;
+  const items = useArchive ? (archiveTasks || []) : (liveTasks || []);
 
   // 오늘이 아닌 날짜는 변경 후 잠깐 뒤 자동 저장한다.
   function scheduleArchiveSave(nextItems) {
@@ -99,10 +104,12 @@ export default function DatePlanEditor({
   }
 
   function updateItems(updater) {
-    if (isToday) {
+    if (!useArchive) {
+      // 오늘 + 미마감 → 라이브 목록을 편집한다.
       onLiveChange((prev) => withOrder(updater(prev || [])));
       return;
     }
+    // 과거 날짜 또는 오늘-마감분 → 아카이브를 편집·자동저장한다.
     setArchiveTasks((prev) => {
       const next = withOrder(updater(prev || []));
       scheduleArchiveSave(next);
@@ -141,7 +148,11 @@ export default function DatePlanEditor({
     <div className="date-editor">
       <div className="date-editor-head">
         <p className="field-label">
-          {date} 계획 {isToday && <span className="mono date-editor-today">· 오늘(라이브)</span>}
+          {date} 계획 {isToday && (
+            <span className="mono date-editor-today">
+              {dayClosed ? '· 오늘(마감됨)' : '· 오늘(라이브)'}
+            </span>
+          )}
           {savedFlash && <span className="mono date-editor-saved"> · 저장됨</span>}
         </p>
         <button type="button" className="btn-ghost" onClick={onClose}>닫기</button>
