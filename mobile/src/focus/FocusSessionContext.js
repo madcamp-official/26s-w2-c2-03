@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { fetchFocusSession, pushFocusSession, stopFocusSessionRemote } from '../api';
+import { startShield, stopShield } from '../../modules/focus-shield';
 
 const FocusSessionContext = createContext(null);
 
@@ -69,6 +70,9 @@ export function FocusSessionProvider({ children }) {
       });
       // 낙관적 반영 — 다음 폴링을 기다리지 않고 바로 오버레이가 뜨게.
       setSession({ status: 'focusing', taskTitle: title, targetMinutes: minutes, source: 'mobile', startedAt });
+      // Forest식 앱 차단 — 미리 고른 앱들에 차단막을 씌운다(iOS 개발 빌드 전용,
+      // 그 외 환경에선 no-op). 선택한 앱이 없으면 아무 일도 안 한다.
+      startShield();
     } finally {
       setBusy(false);
     }
@@ -79,6 +83,7 @@ export function FocusSessionProvider({ children }) {
     try {
       await stopFocusSessionRemote();
       setSession({ status: 'idle' });
+      stopShield(); // 차단막 해제
     } finally {
       setBusy(false);
     }

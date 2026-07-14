@@ -1,9 +1,59 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { usePlannerData } from '../planner/PlannerDataContext';
 import { useFocusSession } from '../focus/FocusSessionContext';
+import {
+  isFocusShieldAvailable, authorizationStatus, requestAuthorization,
+  presentAppPicker, getSelectionSummary,
+} from '../../modules/focus-shield';
+
+// iOS 개발 빌드에서만 뜨는 "집중 중 차단할 앱" 설정 카드. Expo Go/안드로이드에선
+// isFocusShieldAvailable()가 false라 통째로 숨긴다(혼란 방지).
+function AppShieldSetup() {
+  const [summary, setSummary] = useState(() => getSelectionSummary());
+  const [working, setWorking] = useState(false);
+
+  if (!isFocusShieldAvailable()) return null;
+
+  async function pickApps() {
+    setWorking(true);
+    try {
+      if (authorizationStatus() !== 'approved') {
+        const granted = await requestAuthorization();
+        if (!granted) {
+          Alert.alert('권한 필요', '설정 > 스크린 타임에서 권한을 허용해야 앱 차단을 쓸 수 있어요.');
+          return;
+        }
+      }
+      const next = await presentAppPicker();
+      setSummary(next);
+    } catch (err) {
+      Alert.alert('앱 차단 설정 실패', err?.message || '다시 시도해주세요.');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  const count = summary.apps + summary.categories;
+
+  return (
+    <View style={[styles.card, { marginTop: 14 }]}>
+      <Text style={styles.shieldTitle}>집중 중 앱 차단</Text>
+      <Text style={styles.hint}>
+        {count > 0
+          ? `집중을 시작하면 선택한 ${summary.apps}개 앱${summary.categories ? ` · ${summary.categories}개 카테고리` : ''}이 잠깁니다.`
+          : '집중하는 동안 못 열게 막을 앱을 미리 골라두세요. 집중을 시작하면 자동으로 잠깁니다.'}
+      </Text>
+      <Pressable style={styles.shieldButton} onPress={pickApps} disabled={working}>
+        {working ? <ActivityIndicator color={colors.signal} /> : (
+          <Text style={styles.shieldButtonLabel}>{count > 0 ? '차단할 앱 다시 고르기' : '차단할 앱 고르기'}</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}
 
 // 집중 "시작" 폼만 담당한다. 세션이 활성이 되면(내가 시작했든 다른 기기가
 // 시작했든) FocusOverlay가 화면 전체를 덮으므로, 이 탭은 idle일 때만 보인다.
@@ -86,6 +136,8 @@ export default function FocusScreen() {
             {busy ? <ActivityIndicator color={colors.signalInk} /> : <Text style={styles.primaryLabel}>집중 시작</Text>}
           </Pressable>
         </View>
+
+        <AppShieldSetup />
       </ScrollView>
     </SafeAreaView>
   );
@@ -114,4 +166,10 @@ const styles = StyleSheet.create({
   switchLink: { fontSize: 12, color: colors.signal, fontWeight: '600', marginTop: 4, marginBottom: 4 },
   primaryButton: { backgroundColor: colors.signal, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
   primaryLabel: { color: colors.signalInk, fontWeight: '700', fontSize: 13.5 },
+  shieldTitle: { fontSize: 14, fontWeight: '700', color: colors.text1, marginBottom: 6 },
+  shieldButton: {
+    borderWidth: 1, borderColor: colors.signal, borderRadius: 10, paddingVertical: 11,
+    alignItems: 'center', marginTop: 6,
+  },
+  shieldButtonLabel: { color: colors.signal, fontWeight: '700', fontSize: 13 },
 });
