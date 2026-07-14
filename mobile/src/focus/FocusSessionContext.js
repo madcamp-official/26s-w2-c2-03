@@ -18,7 +18,11 @@ export function FocusSessionProvider({ children }) {
   const [session, setSession] = useState({ status: 'idle' });
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
+  const [summary, setSummary] = useState(null); // 방금 끝난 집중 세션 요약(종료 시 표시)
   const cancelledRef = useRef(false);
+  // stopFocus가 항상 최신 session을 읽도록 ref로도 들고 있는다(useCallback 의존성 안정).
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -81,6 +85,16 @@ export function FocusSessionProvider({ children }) {
   const stopFocus = useCallback(async () => {
     setBusy(true);
     try {
+      const s = sessionRef.current;
+      // 이 폰에서 시작한(mobile) 세션을 끝낼 때만 요약을 남긴다. 데스크톱
+      // 세션을 미러링만 하던 경우엔 요약을 띄우지 않는다(그건 PC가 보여줌).
+      if (s && s.status !== 'idle' && s.source === 'mobile' && s.startedAt) {
+        setSummary({
+          taskTitle: s.taskTitle || null,
+          targetMinutes: Number.isFinite(s.targetMinutes) ? s.targetMinutes : null,
+          totalMs: Math.max(0, Date.now() - new Date(s.startedAt).getTime()),
+        });
+      }
       await stopFocusSessionRemote();
       setSession({ status: 'idle' });
       stopShield(); // 차단막 해제
@@ -89,11 +103,13 @@ export function FocusSessionProvider({ children }) {
     }
   }, []);
 
+  const dismissSummary = useCallback(() => setSummary(null), []);
+
   const active = session.status === 'focusing' || session.status === 'onBreak';
   const isMine = session.source === 'mobile';
 
   return (
-    <FocusSessionContext.Provider value={{ session, now, active, isMine, busy, startFocus, stopFocus }}>
+    <FocusSessionContext.Provider value={{ session, now, active, isMine, busy, startFocus, stopFocus, summary, dismissSummary }}>
       {children}
     </FocusSessionContext.Provider>
   );

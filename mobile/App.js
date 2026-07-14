@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { PlannerDataProvider } from './src/planner/PlannerDataContext';
 import { FocusSessionProvider } from './src/focus/FocusSessionContext';
 import FocusOverlay from './src/focus/FocusOverlay';
+import FocusSummary from './src/focus/FocusSummary';
 import { colors } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -44,6 +45,8 @@ function MainTabs() {
           </Tab.Navigator>
           {/* 세션이 활성이면 어느 탭에 있든 이 오버레이가 전체 화면을 덮는다. */}
           <FocusOverlay />
+          {/* 집중이 끝나면(내가 종료) 요약 대시보드를 덮어 보여준다. */}
+          <FocusSummary />
         </View>
       </FocusSessionProvider>
     </PlannerDataProvider>
