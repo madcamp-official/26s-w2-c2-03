@@ -25,6 +25,19 @@ try {
   // 미설치(개발/비Windows) — 무시
 }
 
+// Squirrel이 만든 시작 메뉴 바로가기의 AppUserModelID와 실행 중인 창의 ID가
+// 같아야 Windows 작업표시줄이 바로가기/EXE 아이콘으로 창을 그룹화한다.
+// 이 값이 없으면 Electron 프로세스 그룹으로 인식돼 기본 아이콘이 남을 수 있다.
+const WINDOWS_APP_USER_MODEL_ID = 'com.squirrel.zonemate.Zonemate';
+if (process.platform === 'win32') {
+  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+}
+
+const WINDOW_ICON_PATH = path.join(
+  __dirname,
+  process.platform === 'win32' ? 'icon.ico' : 'icon-1024.png',
+);
+
 // 자동 업데이트: 설치된 앱이 재설치 없이 GitHub Releases의 새 버전을 받아
 // 스스로 갱신한다(update.electronjs.org 경유, public 저장소 필요).
 // - Windows(Squirrel): 서명 없이도 동작.
@@ -182,8 +195,9 @@ function createWindow() {
     width: 1280,
     height: 840,
     title: 'Zonemate',
-    // Windows/Linux 창·작업 표시줄 아이콘. macOS 패키징본은 icon.icns가 우선한다.
-    icon: path.join(__dirname, 'icon-1024.png'),
+    // Windows는 작업표시줄용 멀티사이즈 ICO, Linux는 PNG를 사용한다.
+    // macOS 패키징본의 Dock 아이콘은 forge.config.js의 icon.icns가 우선한다.
+    icon: WINDOW_ICON_PATH,
     webPreferences: {
       // React 앱(웹)에 집중 세션 제어/실시간 상태 브리지를 노출한다.
       preload: path.join(__dirname, 'main-preload.js'),
