@@ -280,6 +280,59 @@ function stopLiveFocusSession() {
   req.end();
 }
 
+// 이 기기가 유휴 상태일 때, 같은 계정의 다른 기기(모바일)가 집중을 시작했으면
+// 이 PC도 같이 집중 모드로 들어가게(읽기 전용 "미러링") 계정 상태를 살핀다.
+// 반대 방향(데스크톱 -> 모바일)은 이미 pushLiveFocusSession/모바일 폴링으로
+// 되어 있으므로, 이건 그 나머지 절반이다.
+const REMOTE_MIRROR_POLL_MS = 5000;
+
+function applyRemoteMirror(session) {
+  const shouldMirror = Boolean(session) && session.status !== 'idle' && session.source === 'mobile';
+  if (shouldMirror) {
+    focusSession.status = session.status;
+    focusSession.isMirror = true;
+    focusSession.taskTitle = session.taskTitle || null;
+    focusSession.targetMinutes = Number.isFinite(session.targetMinutes) ? session.targetMinutes : null;
+    focusSession.focusApps = [];
+    focusSession.sessionStartedAt = session.startedAt ? new Date(session.startedAt).getTime() : Date.now();
+    broadcastFocusState();
+    refreshTray();
+  } else if (focusSession.isMirror) {
+    // 모바일이 집중을 멈췄거나(또는 STALE_MS 지나 서버가 idle 취급) — 미러링 종료.
+    focusSession.status = 'idle';
+    focusSession.isMirror = false;
+    focusSession.taskTitle = null;
+    focusSession.targetMinutes = null;
+    focusSession.sessionStartedAt = null;
+    broadcastFocusState();
+    refreshTray();
+  }
+}
+
+function pollRemoteMirror() {
+  if (!currentAuthToken) return;
+  // 이 기기가 이미 실제 세션(직접 시작)을 진행 중이면 그쪽이 우선이고,
+  // 이 기기 상태를 서버로 밀어 넣는 건 이미 pushLiveFocusSession이 하고
+  // 있으니 여기서는 손대지 않는다. isMirror 중일 때만(=진짜 idle이거나
+  // 이미 미러링 중일 때만) 원격 상태를 계속 확인한다.
+  if (focusSession.status !== 'idle' && !focusSession.isMirror) return;
+  const url = `${BACKEND_ORIGIN}/api/focus-session`;
+  const req = httpClientFor(url).request(url, authedRequestOptions('GET'), (res) => {
+    let body = '';
+    res.on('data', (chunk) => { body += chunk; });
+    res.on('end', () => {
+      try {
+        const { session } = JSON.parse(body);
+        applyRemoteMirror(session);
+      } catch {
+        // 파싱 실패는 조용히 다음 tick에 재시도 — 미러링은 부가 기능
+      }
+    });
+  });
+  req.on('error', () => {});
+  req.end();
+}
+
 // OS 알림센터의 액션 버튼은 macOS(특히 개발 모드/최신 버전)에서 너무
 // 불안정해서(버튼이 아예 안 뜸), 알림 자체를 우리가 만든 작은 플로팅 창으로
 // 대체한다. 이 창은:
@@ -453,6 +506,7 @@ let breakPickerWindow = null;
 const focusSession = {
   id: null,
   status: 'idle', // 'idle' | 'focusing' | 'onBreak'
+  isMirror: false, // 이 기기가 시작한 게 아니라 다른 기기(모바일)의 집중을 따라 보여주는 중인지
   focusApps: [],
   focusAppIds: new Set(),
   targetMinutes: null, // 이번 집중 세션의 목표 시간(분), 없으면 null
@@ -709,13 +763,16 @@ function recordFocusTimeline(now = Date.now(), force = false) {
 
 function buildFocusSnapshot() {
   const now = Date.now();
-  if (focusSession.status !== 'idle') {
+  // 미러링 중(다른 기기가 시작한 세션을 따라 보여주는 중)엔 이 기기에서
+  // 실제 앱 추적이 없어 통계가 무의미하므로 누적하지 않는다.
+  if (focusSession.status !== 'idle' && !focusSession.isMirror) {
     accrueStats(now);
     recordFocusTimeline(now);
   }
 
   return {
     status: focusSession.status, // 'idle' | 'focusing' | 'onBreak'
+    isMirror: focusSession.isMirror,
     // 자기 창(Zonemate 대시보드)을 보는 중(state 'self')엔 이탈로 표시하지 않는다
     // — 트레이 열기든 알트탭이든 Zonemate를 보는 건 이탈이 아니다.
     isDrifting: focusSession.status === 'focusing'
@@ -1139,6 +1196,7 @@ async function pollFocus() {
 function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   const now = Date.now();
   focusSession.id = randomUUID();
+  focusSession.isMirror = false;
   focusSession.targetMinutes = Number.isFinite(targetMinutes) && targetMinutes >= 1
     ? Math.round(targetMinutes)
     : null;
@@ -1199,6 +1257,21 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
 
 function stopFocusSession() {
   if (focusSession.status === 'idle') return;
+
+  if (focusSession.isMirror) {
+    // 미러링 중이던 다른 기기(모바일)의 세션을 여기서 멈춘다 — 이 기기는
+    // 실제로 앱을 추적한 게 없어 통계 요약을 만들 게 없으므로, 서버 상태만
+    // idle로 되돌리고 가볍게 종료한다.
+    stopLiveFocusSession();
+    focusSession.status = 'idle';
+    focusSession.isMirror = false;
+    focusSession.taskTitle = null;
+    focusSession.targetMinutes = null;
+    focusSession.sessionStartedAt = null;
+    broadcastFocusState();
+    refreshTray();
+    return;
+  }
 
   const endedAt = Date.now();
   accrueStats(endedAt);
@@ -1500,6 +1573,7 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+  setInterval(pollRemoteMirror, REMOTE_MIRROR_POLL_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
