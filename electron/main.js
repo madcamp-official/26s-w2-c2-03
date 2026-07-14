@@ -182,6 +182,8 @@ function createWindow() {
     width: 1280,
     height: 840,
     title: 'Zonemate',
+    // Windows/Linux 창·작업 표시줄 아이콘. macOS 패키징본은 icon.icns가 우선한다.
+    icon: path.join(__dirname, 'icon-1024.png'),
     webPreferences: {
       // React 앱(웹)에 집중 세션 제어/실시간 상태 브리지를 노출한다.
       preload: path.join(__dirname, 'main-preload.js'),
@@ -1405,6 +1407,12 @@ ipcMain.handle('get-focus-state', () => buildFocusSnapshot());
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 app.whenReady().then(async () => {
+  // 개발 중인 macOS 앱은 패키징된 .icns가 없으므로 Dock 아이콘을 직접 지정한다.
+  // 패키징본에서는 forge.config.js의 icon.icns 설정을 사용한다.
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock.setIcon(path.join(__dirname, 'icon-1024.png'));
+  }
+
   createTray();
   // 창이 뜨기를 기다리지 않고 바로 요청 — 사용자가 앱을 여는 순간 macOS
   // 권한 다이얼로그가 뜨도록 한다. 백엔드/프론트 기동을 막지 않기 위해
