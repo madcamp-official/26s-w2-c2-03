@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { fetchPlannerData, savePlannerData } from '../api';
+import { syncPlannedBreakNotifications } from '../notifications/plannedBreakNotifications';
 
 const PlannerDataContext = createContext(null);
 
@@ -50,6 +51,12 @@ export function PlannerDataProvider({ children }) {
     }, 350);
     return () => clearTimeout(timer);
   }, [tasks, events, dayEndTime, dayEndDate, dataReady]);
+
+  useEffect(() => {
+    if (!dataReady) return;
+    syncPlannedBreakNotifications(tasks, dayEndDate)
+      .catch((err) => console.warn('[notifications] 휴식 알림 예약 실패:', err?.message || err));
+  }, [tasks, dayEndDate, dataReady]);
 
   const addEvent = useCallback((event) => {
     setEvents((prev) => [...prev, { ...event, id: event.id || makeEventId() }]);
