@@ -3,10 +3,24 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndic
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { usePlannerData } from '../planner/PlannerDataContext';
-import { generateDeadlineRoadmap, fetchDailyArchive } from '../api';
+import { generateDeadlineRoadmap, fetchDailyArchive, fetchFocusDay } from '../api';
+import FocusGraph from '../focus/FocusGraph';
 import {
   WEEKDAYS, buildMonthGrid, startOfMonth, addMonths, isSameDay, toDateKey,
 } from '../utils/calendarGrid';
+
+function fmtDur(ms) {
+  if (ms == null) return '-';
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+}
+function clock(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 let idCounter = 1;
 function makeId(prefix) {
@@ -23,6 +37,10 @@ export default function CalendarScreen() {
   // daily-archives에서 불러온다(데스크톱 DatePlanEditor와 같은 규칙).
   const [archiveTasks, setArchiveTasks] = useState(null); // null=로딩중/미조회
   const [archiveLoading, setArchiveLoading] = useState(false);
+  // 그날의 집중 세션 기록(데스크톱이 추적한 timeline·통계). 데스크톱에서 한
+  // 집중을 그래프로 보여준다. null=아직 안 불러옴.
+  const [focusSessions, setFocusSessions] = useState(null);
+  const [expandedSessionId, setExpandedSessionId] = useState(null);
 
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState(''); // "YYYY-MM-DD HH:MM" 형식으로 직접 입력
@@ -64,6 +82,17 @@ export default function CalendarScreen() {
       .finally(() => { if (!cancelled) setArchiveLoading(false); });
     return () => { cancelled = true; };
   }, [selectedKey, isSelectedToday]);
+
+  // 선택한 날의 집중 세션 기록을 불러온다(모든 날짜).
+  useEffect(() => {
+    let cancelled = false;
+    setFocusSessions(null);
+    setExpandedSessionId(null);
+    fetchFocusDay(selectedKey)
+      .then((data) => { if (!cancelled) setFocusSessions(data.sessions || []); })
+      .catch(() => { if (!cancelled) setFocusSessions([]); });
+    return () => { cancelled = true; };
+  }, [selectedKey]);
 
   // 선택한 날의 할 일 목록(오늘=라이브, 그 외=아카이브).
   const selectedDayTasks = isSelectedToday ? (tasks || []) : (archiveTasks || []);
@@ -227,6 +256,51 @@ export default function CalendarScreen() {
               </Text>
             </View>
           ))}
+
+          <Text style={styles.detailSectionLabel}>집중 기록</Text>
+          {focusSessions === null && <Text style={styles.hintText}>불러오는 중...</Text>}
+          {focusSessions && focusSessions.length === 0 && (
+            <Text style={styles.hintText}>이 날 집중 기록이 없어요. (데스크톱에서 한 집중이 여기 그래프로 보여요)</Text>
+          )}
+          {focusSessions && focusSessions.map((s) => (
+            <View key={s.sessionId} style={styles.focusCard}>
+              <View style={styles.focusCardHead}>
+                <Text style={styles.focusCardTitle} numberOfLines={1}>{s.taskTitle || '집중 세션'}</Text>
+                <Text style={styles.focusCardTime}>
+                  {clock(s.startedAt)}{s.endedAt ? `–${clock(s.endedAt)}` : ' · 진행 중'}
+                </Text>
+              </View>
+              {s.focusApps.length > 0 && (
+                <Text style={styles.focusCardApps} numberOfLines={1}>{s.focusApps.join(', ')}</Text>
+              )}
+              {s.completed ? (
+                <>
+                  <View style={styles.focusStatsRow}>
+                    <Text style={[styles.focusStat, { color: colors.signal }]}>집중 {fmtDur(s.totalFocusMs)}</Text>
+                    <Text style={[styles.focusStat, { color: colors.urgent }]}>딴짓 {fmtDur(s.totalDriftMs)}</Text>
+                    {s.focusRate != null && <Text style={styles.focusStat}>집중률 {s.focusRate}%</Text>}
+                    <Text style={styles.focusStat}>벗어남 {s.driftCount || 0}회</Text>
+                  </View>
+                  {(s.timeline || []).length > 0 && (
+                    <>
+                      <Pressable onPress={() => setExpandedSessionId((id) => (id === s.sessionId ? null : s.sessionId))}>
+                        <Text style={styles.graphToggle}>
+                          {expandedSessionId === s.sessionId ? '그래프 접기' : '집중 그래프 보기'}
+                        </Text>
+                      </Pressable>
+                      {expandedSessionId === s.sessionId && (
+                        <View style={{ marginTop: 8 }}>
+                          <FocusGraph timeline={s.timeline} totalElapsedMs={s.totalElapsedMs} />
+                        </View>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : (
+                <Text style={styles.hintText}>아직 끝나지 않은 세션이에요</Text>
+              )}
+            </View>
+          ))}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -294,4 +368,12 @@ const styles = StyleSheet.create({
   detailTaskTitle: { flex: 1, fontSize: 12.5, color: colors.text1 },
   detailTaskTitleDone: { textDecorationLine: 'line-through', color: colors.text2 },
   detailTaskMeta: { fontSize: 11, color: colors.text2 },
+  focusCard: { backgroundColor: colors.ground, borderRadius: 12, borderWidth: 1, borderColor: colors.line, padding: 12, marginTop: 8 },
+  focusCardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  focusCardTitle: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.text1 },
+  focusCardTime: { fontSize: 11, color: colors.text2 },
+  focusCardApps: { fontSize: 11, color: colors.text2, marginTop: 3 },
+  focusStatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
+  focusStat: { fontSize: 11.5, fontWeight: '600', color: colors.text1 },
+  graphToggle: { fontSize: 12, fontWeight: '700', color: colors.signal, marginTop: 10 },
 });
