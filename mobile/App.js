@@ -6,6 +6,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { PlannerDataProvider } from './src/planner/PlannerDataContext';
+import { FocusSessionProvider } from './src/focus/FocusSessionContext';
+import FocusOverlay from './src/focus/FocusOverlay';
 import { colors } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -27,17 +29,23 @@ function TabIcon({ label, focused }) {
 function MainTabs() {
   return (
     <PlannerDataProvider>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: colors.signal,
-          tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.line },
-        }}
-      >
-        <Tab.Screen name="Today" component={TodayScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="오늘" focused={focused} />, tabBarLabel: '오늘의 계획' }} />
-        <Tab.Screen name="Calendar" component={CalendarScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="달력" focused={focused} />, tabBarLabel: '캘린더' }} />
-        <Tab.Screen name="Focus" component={FocusScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="집중" focused={focused} />, tabBarLabel: '집중 모드' }} />
-      </Tab.Navigator>
+      <FocusSessionProvider>
+        <View style={{ flex: 1 }}>
+          <Tab.Navigator
+            screenOptions={{
+              headerShown: false,
+              tabBarActiveTintColor: colors.signal,
+              tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.line },
+            }}
+          >
+            <Tab.Screen name="Today" component={TodayScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="오늘" focused={focused} />, tabBarLabel: '오늘의 계획' }} />
+            <Tab.Screen name="Calendar" component={CalendarScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="달력" focused={focused} />, tabBarLabel: '캘린더' }} />
+            <Tab.Screen name="Focus" component={FocusScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon label="집중" focused={focused} />, tabBarLabel: '집중 모드' }} />
+          </Tab.Navigator>
+          {/* 세션이 활성이면 어느 탭에 있든 이 오버레이가 전체 화면을 덮는다. */}
+          <FocusOverlay />
+        </View>
+      </FocusSessionProvider>
     </PlannerDataProvider>
   );
 }
