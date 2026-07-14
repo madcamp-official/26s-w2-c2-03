@@ -32,24 +32,16 @@ function toPublicSession(row) {
   };
 }
 
-// [임시 진단] 윈도우 미러링 원인 추적 — 누가 push/poll 하는지. 파악 후 제거.
-function dbg(...args) {
-  console.log('[focus-session]', ...args);
-}
-
 // 다른 기기(들)가 "지금 이 계정이 뭘 하고 있는지" 보려고 폴링한다.
 router.get('/', (req, res) => {
   const row = db.prepare('SELECT * FROM focus_live_sessions WHERE user_id = ?').get(req.user.id);
-  const pub = toPublicSession(row);
-  dbg('GET  user=', String(req.user.id).slice(0, 8), '-> status=', pub.status, 'source=', pub.source, 'stale=', pub.stale);
-  res.json({ session: pub });
+  res.json({ session: toPublicSession(row) });
 });
 
 // 집중/휴식 상태가 바뀔 때마다(또는 주기적으로) 자기 상태를 밀어 넣는다.
 // 데스크톱은 pollFocus tick마다, 모바일은 수동 타이머 시작/틱마다 호출.
 router.put('/', (req, res) => {
   const { status, taskTitle, targetMinutes, source, gauge, currentState, startedAt } = req.body || {};
-  dbg('PUT  user=', String(req.user.id).slice(0, 8), 'status=', status, 'source=', source);
   if (!['idle', 'focusing', 'onBreak'].includes(status)) {
     return res.status(400).json({ error: 'status가 올바르지 않아요' });
   }
