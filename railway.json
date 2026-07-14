@@ -2,7 +2,13 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "RAILPACK",
-    "buildCommand": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend"
+    "buildCommand": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "watchPatterns": [
+      "backend/**",
+      "frontend/**",
+      "railway.json",
+      "package.json"
+    ]
   },
   "deploy": {
     "startCommand": "node backend/src/server.js",
