@@ -56,12 +56,8 @@ function shouldIgnore(file) {
 
 module.exports = {
   outDir: forgeOutDirectory,
-<<<<<<< HEAD
-  // get-windows는 N-API 바이너리라 설치된 바이너리를 그대로 사용한다.
-=======
   // get-windows는 N-API 바이너리라 Electron 43/Node 24에서 이미 로드 검증했다.
   // 로컬 C++ 툴체인으로 다시 빌드하지 않고 설치된 바이너리를 그대로 사용한다.
->>>>>>> ccd1df2ee6ac344121f084ef4484ad0f25707a2e
   rebuildConfig: {
     onlyModules: [],
   },
@@ -70,11 +66,7 @@ module.exports = {
     name: 'Zonemate',
     executableName: 'Zonemate',
     appBundleId: 'io.zonemate.desktop',
-<<<<<<< HEAD
-    // 확장자 없이 지정하면 Forge가 Windows=.ico, macOS=.icns를 선택한다.
-=======
     // 확장자 없이 지정 — 패키저가 플랫폼별로 .icns(mac)/.ico(win)를 붙인다.
->>>>>>> ccd1df2ee6ac344121f084ef4484ad0f25707a2e
     icon: path.join(__dirname, 'icon'),
     extraResource: [
       path.join(__dirname, 'build-resources', 'backend'),
@@ -95,19 +87,13 @@ module.exports = {
       },
     },
     {
-      },
-    },
-    {
       // macOS zip — Squirrel.Mac 자동 업데이트가 소비하는 포맷이자, 서명 없이도
       // 만들 수 있는 가장 안전한 배포물.
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
     },
     {
-<<<<<<< HEAD
-=======
       // macOS .dmg — 더 보기 좋은 다운로드용 설치 이미지.
->>>>>>> ccd1df2ee6ac344121f084ef4484ad0f25707a2e
       name: '@electron-forge/maker-dmg',
       platforms: ['darwin'],
       config: {
@@ -123,12 +109,9 @@ module.exports = {
   ],
   publishers: [
     {
-<<<<<<< HEAD
-=======
       // 빌드 산출물을 GitHub Release로 올린다. draft:false라 태그 push 시 CI가
       // 곧바로 "공개" 릴리스를 발행한다(= 설치된 앱이 update.electronjs.org로
       // 자동 업데이트). 검토 후 수동 공개로 바꾸려면 draft:true로.
->>>>>>> ccd1df2ee6ac344121f084ef4484ad0f25707a2e
       name: '@electron-forge/publisher-github',
       config: {
         repository: { owner: 'madcamp-official', name: '26s-w2-c2-03' },
