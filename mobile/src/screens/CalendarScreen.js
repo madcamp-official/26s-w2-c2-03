@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { usePlannerData } from '../planner/PlannerDataContext';
-import { generateDeadlineRoadmap } from '../api';
+import { generateDeadlineRoadmap, fetchDailyArchive } from '../api';
 import {
   WEEKDAYS, buildMonthGrid, startOfMonth, addMonths, isSameDay, toDateKey,
 } from '../utils/calendarGrid';
@@ -16,9 +16,13 @@ function makeId(prefix) {
 const CELL_SIZE = (Dimensions.get('window').width - 40) / 7;
 
 export default function CalendarScreen() {
-  const { events, addEvent, updateEvent, removeEvent, dataReady } = usePlannerData();
+  const { events, tasks, addEvent, updateEvent, removeEvent, dataReady } = usePlannerData();
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => toDateKey(new Date()));
+  // 선택한 날의 할 일. 오늘이면 라이브 tasks를 그대로 쓰고, 다른 날이면
+  // daily-archives에서 불러온다(데스크톱 DatePlanEditor와 같은 규칙).
+  const [archiveTasks, setArchiveTasks] = useState(null); // null=로딩중/미조회
+  const [archiveLoading, setArchiveLoading] = useState(false);
 
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState(''); // "YYYY-MM-DD HH:MM" 형식으로 직접 입력
@@ -43,6 +47,28 @@ export default function CalendarScreen() {
   }, [events]);
 
   const selectedDayEvents = eventsByDay.get(selectedKey) || [];
+  const isSelectedToday = selectedKey === todayKey;
+
+  // 오늘이 아닌 날을 선택하면 그 날의 아카이브를 불러온다. 오늘이면 라이브
+  // tasks를 쓰므로 조회하지 않는다.
+  useEffect(() => {
+    if (isSelectedToday) {
+      setArchiveTasks(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setArchiveLoading(true);
+    fetchDailyArchive(selectedKey)
+      .then((data) => { if (!cancelled) setArchiveTasks(data.tasks || []); })
+      .catch(() => { if (!cancelled) setArchiveTasks([]); })
+      .finally(() => { if (!cancelled) setArchiveLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedKey, isSelectedToday]);
+
+  // 선택한 날의 할 일 목록(오늘=라이브, 그 외=아카이브).
+  const selectedDayTasks = isSelectedToday ? (tasks || []) : (archiveTasks || []);
+  // 오늘 할 일이 있는지 — 오늘 칸에 점을 찍어 표시하기 위함.
+  const todayHasTasks = (tasks || []).length > 0;
 
   async function handleSubmit() {
     if (!title.trim() || !deadline.trim()) return;
@@ -154,7 +180,7 @@ export default function CalendarScreen() {
                     {day.getDate()}
                   </Text>
                 </View>
-                {dayEvents.length > 0 && (
+                {(dayEvents.length > 0 || (isToday && todayHasTasks)) && (
                   <View style={[styles.dot, dayEvents.some((e) => e.kind === 'deadline') && styles.dotUrgent]} />
                 )}
               </Pressable>
@@ -163,7 +189,11 @@ export default function CalendarScreen() {
         </View>
 
         <View style={styles.dayDetail}>
-          <Text style={styles.dayDetailTitle}>{selectedKey}</Text>
+          <Text style={styles.dayDetailTitle}>
+            {selectedKey}{isSelectedToday ? ' · 오늘' : ''}
+          </Text>
+
+          <Text style={styles.detailSectionLabel}>일정</Text>
           {selectedDayEvents.length === 0 && <Text style={styles.hintText}>이 날의 일정이 없어요.</Text>}
           {selectedDayEvents.map((ev) => (
             <View key={ev.id} style={styles.eventRow}>
@@ -174,6 +204,27 @@ export default function CalendarScreen() {
               <Pressable onPress={() => removeEvent(ev.id)} hitSlop={8}>
                 <Text style={styles.removeX}>×</Text>
               </Pressable>
+            </View>
+          ))}
+
+          <Text style={styles.detailSectionLabel}>할 일</Text>
+          {!isSelectedToday && archiveLoading && <Text style={styles.hintText}>불러오는 중...</Text>}
+          {!archiveLoading && selectedDayTasks.length === 0 && (
+            <Text style={styles.hintText}>
+              {isSelectedToday ? '오늘 할 일이 없어요. "오늘의 계획" 탭에서 추가하세요.' : '이 날의 할 일 기록이 없어요.'}
+            </Text>
+          )}
+          {!archiveLoading && selectedDayTasks.map((t) => (
+            <View key={t.id} style={styles.detailTaskRow}>
+              <View style={[styles.detailCheck, t.done && styles.detailCheckDone]}>
+                {t.done && <Text style={styles.detailCheckMark}>✓</Text>}
+              </View>
+              <Text style={[styles.detailTaskTitle, t.done && styles.detailTaskTitleDone]} numberOfLines={1}>
+                {t.title}
+              </Text>
+              <Text style={styles.detailTaskMeta}>
+                {t.startTime ? `${t.startTime} · ` : ''}{t.targetMinutes}분
+              </Text>
             </View>
           ))}
         </View>
@@ -224,6 +275,7 @@ const styles = StyleSheet.create({
   dotUrgent: { backgroundColor: colors.urgent },
   dayDetail: { marginTop: 16, backgroundColor: colors.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.line },
   dayDetailTitle: { fontSize: 13, fontWeight: '700', color: colors.text1, marginBottom: 8 },
+  detailSectionLabel: { fontSize: 10.5, fontWeight: '700', color: colors.text2, marginTop: 12, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
   hintText: { fontSize: 12.5, color: colors.text2 },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   eventTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
@@ -232,4 +284,14 @@ const styles = StyleSheet.create({
   eventTagText: { color: colors.signalInk, fontSize: 10, fontWeight: '700' },
   eventTitle: { flex: 1, fontSize: 12.5, color: colors.text1 },
   removeX: { fontSize: 16, color: colors.text2, paddingHorizontal: 4 },
+  detailTaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  detailCheck: {
+    width: 16, height: 16, borderRadius: 5, borderWidth: 1.5, borderColor: colors.line,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  detailCheckDone: { backgroundColor: colors.signal, borderColor: colors.signal },
+  detailCheckMark: { color: colors.signalInk, fontSize: 10, fontWeight: '700' },
+  detailTaskTitle: { flex: 1, fontSize: 12.5, color: colors.text1 },
+  detailTaskTitleDone: { textDecorationLine: 'line-through', color: colors.text2 },
+  detailTaskMeta: { fontSize: 11, color: colors.text2 },
 });

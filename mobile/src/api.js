@@ -49,6 +49,9 @@ export const generatePlanChat = ({ messages, forceFinalize }) =>
   request('/api/plan', { method: 'POST', body: { messages, forceFinalize } });
 export const generateDeadlineRoadmap = ({ title, details, deadline }) =>
   request('/api/deadline-tasks', { method: 'POST', body: { title, details, deadline } });
+// 지난 날짜의 "오늘의 계획" 스냅샷. 오늘 날짜는 planner-data의 라이브 tasks를
+// 쓰고, 그 외 날짜만 이걸로 불러온다(데스크톱 DatePlanEditor와 같은 규칙).
+export const fetchDailyArchive = (date) => request(`/api/daily-archives/${date}`);
 
 // ---- 실시간 집중 세션(3단계) ----
 export const fetchFocusSession = () => request('/api/focus-session');
