@@ -55,30 +55,61 @@ function shouldIgnore(file) {
 }
 
 module.exports = {
+  outDir: forgeOutDirectory,
+  // get-windows는 N-API 바이너리라 설치된 바이너리를 그대로 사용한다.
+  rebuildConfig: {
+    onlyModules: [],
+  },
   packagerConfig: {
-    // 확장자 없이! Forge가 OS별로 .ico / .icns 자동 선택
+    asar: true,
+    name: 'Zonemate',
+    executableName: 'Zonemate',
+    appBundleId: 'io.zonemate.desktop',
+    // 확장자 없이 지정하면 Forge가 Windows=.ico, macOS=.icns를 선택한다.
     icon: path.join(__dirname, 'icon'),
+    extraResource: [
+      path.join(__dirname, 'build-resources', 'backend'),
+      path.join(__dirname, 'build-resources', 'frontend'),
+    ],
+    ignore: shouldIgnore,
   },
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
       config: {
         name: 'zonemate',
         setupExe: 'Zonemate-Setup.exe',
-        setupIcon: path.join(__dirname, 'icon.ico'), // 확장자 필수
-        iconUrl: 'https://raw.githubusercontent.com/.../icon.ico', // 제어판 아이콘용(선택, https 필수)
+        // Setup.exe 자체 아이콘은 확장자를 포함한 실제 ICO 파일을 요구한다.
+        setupIcon: path.join(__dirname, 'icon.ico'),
       },
+    },
+    {
+      name: '@electron-forge/maker-zip',
+      platforms: ['darwin'],
     },
     {
       name: '@electron-forge/maker-dmg',
+      platforms: ['darwin'],
       config: {
         name: 'Zonemate',
-        icon: path.join(__dirname, 'icon.icns'), // DMG 볼륨 아이콘
       },
     },
+  ],
+  plugins: [
     {
-      name: '@electron-forge/maker-deb',
-      config: { options: { icon: path.join(__dirname, 'icon-1024.png') } },
+      name: '@electron-forge/plugin-auto-unpack-natives',
+      config: {},
+    },
+  ],
+  publishers: [
+    {
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: { owner: 'madcamp-official', name: '26s-w2-c2-03' },
+        draft: false,
+        prerelease: false,
+      },
     },
   ],
 };

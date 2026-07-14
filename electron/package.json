@@ -12,6 +12,8 @@
     "start": "electron .",
     "smoke:windows": "set \"ELECTRON_RUN_AS_NODE=\" && set \"ELECTRON_SMOKE_TEST=1\" && electron .",
     "build:resources": "npm --prefix ../frontend run build && node scripts/prepare-package.js",
+    "package": "npm run build:resources && electron-forge package",
+    "make": "npm run build:resources && electron-forge make",
     "package:windows": "npm run build:resources && electron-forge package --platform=win32 --arch=x64",
     "make:windows": "npm run build:resources && electron-forge make --platform=win32 --arch=x64 && node scripts/copy-installer.js",
     "package:mac": "npm run build:resources && electron-forge package --platform=darwin",
