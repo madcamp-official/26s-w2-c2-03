@@ -123,6 +123,7 @@ let frontendProcess = null;
 let osTrackerProcess = null;
 let mainWindow = null;
 let tray = null;
+let isQuitting = false;
 
 // 백엔드는 자식 프로세스로 띄운다. Electron 메인 프로세스에 바로 import해서
 // 합칠 수도 있지만(같은 Node 환경이니까), node:sqlite가 동기 방식이라 그렇게
@@ -241,6 +242,19 @@ function createWindow() {
     },
   });
   applyWindowIcon(mainWindow);
+
+  // 메인 창의 X는 "창만 닫기"가 아니라 앱 전체 종료다. 알림/집중 설정 같은
+  // 보조 창이 남아 있어도 window-all-closed를 기다리지 않고 트레이까지 없앤다.
+  mainWindow.on('close', () => {
+    if (!isQuitting) {
+      isQuitting = true;
+      app.quit();
+    }
+  });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   mainWindow.loadURL(FRONTEND_URL);
   // 창이 준비되면 현재 상태를 즉시 한 번 보내 초기 화면을 맞춘다.
   mainWindow.webContents.on('did-finish-load', () => {
@@ -1653,10 +1667,18 @@ app.on('window-all-closed', () => {
   // 인스턴스가 트레이에 남아 있으면 재실행 시 세션이 중복되고 로그인이 꼬이는
   // 문제가 있어서, 창을 닫으면 before-quit에서 집중 세션 종료(서버에 idle
   // 반영)·백엔드/트래커 정리까지 함께 끝낸다.
-  app.quit();
+  if (!isQuitting) {
+    isQuitting = true;
+    app.quit();
+  }
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
   // 이 기기가 직접 시작한(소유한) 세션만 서버에 종료를 알린다. 다른 기기
   // (모바일)의 세션을 미러링만 하던 중이라면, 앱을 닫는다고 그 기기의 집중을
   // 멈춰선 안 되므로 서버에 stop을 보내지 않는다.
