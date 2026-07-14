@@ -76,9 +76,10 @@ module.exports = {
         icon: path.join(__dirname, 'icon.icns'), // DMG 볼륨 아이콘
       },
     },
-    {
-      name: '@electron-forge/maker-deb',
-      config: { options: { icon: path.join(__dirname, 'icon-1024.png') } },
-    },
+    // 리눅스(.deb) maker는 뺐다 — CI(release.yml)는 mac/Windows만 빌드하는데,
+    // forge는 플랫폼 필터 전에 모든 maker 모듈을 먼저 resolve하므로 설치 안 된
+    // @electron-forge/maker-deb가 있으면 mac/Windows 빌드까지 전부 실패한다.
+    // 리눅스 배포가 필요해지면 그때 maker-deb를 devDependencies에 추가하고
+    // release.yml에 ubuntu 잡을 함께 넣어야 한다.
   ],
 };
