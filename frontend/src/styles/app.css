@@ -726,6 +726,29 @@ input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
 .focus-summary-stat span { color: var(--text-2); font-size: 11.5px; }
 .focus-summary-stat.tone-focus strong { color: var(--signal); }
 .focus-summary-stat.tone-drift strong { color: var(--urgent); }
+.focus-drift-destinations {
+  margin-top: 18px; padding: 14px; border: 1px solid var(--line);
+  border-radius: var(--radius-md); background: var(--ground);
+}
+.focus-drift-destinations-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px;
+}
+.focus-drift-destinations-head h3 { margin: 0; color: var(--text-1); font-size: 14px; }
+.focus-drift-destinations-head > span { color: var(--text-2); font-size: 10.5px; }
+.focus-drift-destinations ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.focus-drift-destinations li {
+  min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface);
+}
+.focus-drift-destinations li > div { min-width: 0; display: grid; gap: 2px; }
+.focus-drift-destinations li strong { color: var(--text-1); font-size: 12.5px; }
+.focus-drift-destinations li div span {
+  overflow: hidden; color: var(--text-2); font-size: 11px; text-overflow: ellipsis; white-space: nowrap;
+}
+.focus-drift-duration { flex: none; color: var(--urgent); font-size: 11px; }
+.focus-drift-more { margin: 8px 0 0; color: var(--text-2); font-size: 10.5px; text-align: right; }
+.focus-drift-destinations.compact { margin-top: 10px; padding: 10px; }
+.focus-drift-destinations.compact li { padding: 6px 8px; }
 .focus-summary-graph-head {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 24px 0 10px;
 }
@@ -738,9 +761,29 @@ input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
 .focus-summary-chart { display: block; width: 100%; height: auto; min-height: 190px; }
 .focus-summary-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 5; }
 .focus-summary-axis { fill: var(--text-2); font-size: 10px; font-family: var(--font-mono); }
+.focus-summary-state-segment {
+  transform-box: fill-box; transform-origin: left center;
+  animation: focus-summary-segment-in .38s cubic-bezier(.22, 1, .36, 1) both;
+}
 .focus-summary-line {
   fill: none; stroke: var(--signal); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;
   filter: drop-shadow(0 3px 4px rgba(224, 138, 30, .18));
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: focus-summary-line-draw 1.15s cubic-bezier(.65, 0, .35, 1) .2s forwards;
+}
+.focus-summary-end-dot {
+  fill: var(--signal); stroke: var(--surface); stroke-width: 3;
+  transform-box: fill-box; transform-origin: center; opacity: 0;
+  animation: focus-summary-dot-in .45s cubic-bezier(.34, 1.56, .64, 1) 1.25s forwards;
+}
+@keyframes focus-summary-line-draw { to { stroke-dashoffset: 0; } }
+@keyframes focus-summary-segment-in {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes focus-summary-dot-in {
+  from { opacity: 0; transform: scale(.2); }
+  to { opacity: 1; transform: scale(1); }
 }
 .focus-summary-legend { display: flex; justify-content: center; gap: 16px; color: var(--text-2); font-size: 11px; }
 .focus-summary-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -753,6 +796,14 @@ input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
   padding-top: 20px; color: var(--text-2); font-size: 12px;
 }
 .focus-summary-foot .btn-primary { margin-top: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-summary-state-segment,
+  .focus-summary-line,
+  .focus-summary-end-dot { animation: none; }
+  .focus-summary-line { stroke-dashoffset: 0; }
+  .focus-summary-end-dot { opacity: 1; }
+}
 
 @media (max-width: 680px) {
   .focus-summary-modal { padding: 20px; }

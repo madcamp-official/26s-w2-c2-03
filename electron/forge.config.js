@@ -78,6 +78,8 @@ module.exports = {
     extraResource: [
       path.join(__dirname, 'build-resources', 'backend'),
       path.join(__dirname, 'build-resources', 'frontend'),
+      path.join(__dirname, 'icon.ico'),
+      path.join(__dirname, 'icon-1024.png'),
     ],
     ignore: shouldIgnore,
   },

@@ -111,6 +111,7 @@ router.get('/day/:date', (req, res) => {
       focusSegmentCount: endMeta?.focusSegmentCount ?? null,
       focusRate: endMeta?.focusRate ?? null,
       totalElapsedMs: endMeta?.totalElapsedMs ?? null,
+      driftDestinations: Array.isArray(endMeta?.driftDestinations) ? endMeta.driftDestinations : [],
       timeline: Array.isArray(endMeta?.timeline) ? endMeta.timeline : [],
     };
   });

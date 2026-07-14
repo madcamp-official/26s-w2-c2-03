@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchDailyArchive, saveDailyArchive, fetchFocusDay } from '../api.js';
 import { toLocalInputValue } from '../utils/calendarGrid.js';
 import DayWheel from './DayWheel.jsx';
-import { FocusGraph } from './FocusSummaryModal.jsx';
+import { DriftDestinationList, FocusGraph } from './FocusSummaryModal.jsx';
 
 let idCounter = 1;
 function makeTaskId() {
@@ -258,6 +258,7 @@ export default function DatePlanEditor({
                             <span className="focus-log-stat num">집중률 {s.focusRate}%</span>
                           )}
                         </div>
+                        <DriftDestinationList destinations={s.driftDestinations || []} compact />
                         {(s.timeline || []).length > 0 && (
                           <>
                             <button

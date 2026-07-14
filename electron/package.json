@@ -1,7 +1,7 @@
 {
   "name": "zonemate-desktop",
   "productName": "Zonemate",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "private": true,
   "author": "Zonemate Team",
   "description": "Zonemate desktop focus assistant",

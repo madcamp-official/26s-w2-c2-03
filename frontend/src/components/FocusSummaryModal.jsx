@@ -15,6 +15,53 @@ function stateColor(state) {
   return 'var(--line)';
 }
 
+export function DriftDestinationList({ destinations = [], compact = false }) {
+  const grouped = new Map();
+  destinations.forEach((destination) => {
+    if (!destination?.appName) return;
+    const screenTitle = destination.screenTitle || null;
+    const key = `${destination.appName}\n${screenTitle || ''}`;
+    const previous = grouped.get(key) || {
+      appName: destination.appName,
+      screenTitle,
+      durationMs: 0,
+      visits: 0,
+    };
+    previous.durationMs += Math.max(0, Number(destination.durationMs) || 0);
+    previous.visits += 1;
+    grouped.set(key, previous);
+  });
+
+  const items = [...grouped.values()].sort((a, b) => b.durationMs - a.durationMs);
+  if (items.length === 0) return null;
+  const visibleItems = compact ? items.slice(0, 5) : items.slice(0, 8);
+
+  return (
+    <section className={`focus-drift-destinations${compact ? ' compact' : ''}`}>
+      <div className="focus-drift-destinations-head">
+        <h3>이탈한 앱과 화면</h3>
+        <span className="mono">{items.length}곳</span>
+      </div>
+      <ul>
+        {visibleItems.map((item) => (
+          <li key={`${item.appName}-${item.screenTitle || ''}`}>
+            <div>
+              <strong>{item.appName}</strong>
+              {item.screenTitle && <span title={item.screenTitle}>{item.screenTitle}</span>}
+            </div>
+            <span className="focus-drift-duration num">
+              {formatDuration(item.durationMs)}{item.visits > 1 ? ` · ${item.visits}회` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {items.length > visibleItems.length && (
+        <p className="focus-drift-more">그 외 {items.length - visibleItems.length}곳</p>
+      )}
+    </section>
+  );
+}
+
 export function FocusGraph({ timeline, totalElapsedMs }) {
   const width = 720;
   const height = 230;
@@ -30,6 +77,7 @@ export function FocusGraph({ timeline, totalElapsedMs }) {
   const xOf = (elapsedMs) => left + (Math.min(duration, Math.max(0, elapsedMs)) / duration) * plotWidth;
   const yOf = (gauge) => top + (1 - Math.min(100, Math.max(0, gauge)) / 100) * plotHeight;
   const points = samples.map((point) => `${xOf(point.elapsedMs)},${yOf(point.gauge)}`).join(' ');
+  const lastSample = samples.at(-1);
 
   return (
     <div className="focus-summary-chart-wrap">
@@ -53,17 +101,25 @@ export function FocusGraph({ timeline, totalElapsedMs }) {
           return (
             <rect
               key={`${point.elapsedMs}-${index}`}
+              className="focus-summary-state-segment"
               x={x}
               y={height - bottom + 12}
               width={Math.max(2, xOf(nextElapsed) - x)}
               height="8"
               rx="2"
               fill={stateColor(point.state)}
+              style={{ animationDelay: `${120 + Math.min(index, 20) * 35}ms` }}
             />
           );
         })}
 
-        <polyline points={points} className="focus-summary-line" />
+        <polyline points={points} pathLength="1" className="focus-summary-line" />
+        <circle
+          className="focus-summary-end-dot"
+          cx={xOf(lastSample.elapsedMs)}
+          cy={yOf(lastSample.gauge)}
+          r="5"
+        />
         <text x={left} y={height - 5} textAnchor="start" className="focus-summary-axis">시작</text>
         <text x={width - right} y={height - 5} textAnchor="end" className="focus-summary-axis">
           {formatDuration(duration)}
@@ -106,6 +162,8 @@ export default function FocusSummaryModal({ summary, onClose }) {
           <SummaryStat label="총 이탈 시간" value={formatDuration(summary.totalDriftMs)} tone="drift" />
           <SummaryStat label="집중 구간" value={`${summary.focusSegmentCount || 0}회`} />
         </div>
+
+        <DriftDestinationList destinations={summary.driftDestinations || []} />
 
         <div className="focus-summary-graph-head">
           <div>

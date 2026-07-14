@@ -52,11 +52,11 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 
-// EXE/시작 메뉴 아이콘은 Forge가 icon.ico를 삽입하고, 실행 중인 창의 HICON은
-// Electron이 확실히 디코딩할 수 있는 PNG NativeImage를 직접 사용한다.
-// 단순 문자열 경로만 넘기면 일부 Windows 환경에서 창 아이콘 로드에 실패해
-// 작업표시줄에 기본 Electron 아이콘이 남을 수 있다.
-const WINDOW_ICON_PATH = path.join(__dirname, 'icon-1024.png');
+// EXE/시작 메뉴 아이콘은 Forge가 icon.ico를 삽입한다. 실행 중인 창도 Windows에서는
+// ASAR 밖 resources/icon.ico를 NativeImage로 읽어 패키지 내부 경로 문제를 피한다.
+const WINDOW_ICON_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon-1024.png')
+  : path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon-1024.png');
 let windowIconImage = null;
 
 function getWindowIcon() {
@@ -242,6 +242,9 @@ function createWindow() {
     },
   });
   applyWindowIcon(mainWindow);
+  // Windows가 창을 실제로 만들면서 기본 Electron HICON을 다시 씌우는 경우가 있어
+  // 작업표시줄에 나타나기 직전 패키징된 ICO를 한 번 더 적용한다.
+  mainWindow.once('ready-to-show', () => applyWindowIcon(mainWindow));
 
   // 메인 창의 X는 "창만 닫기"가 아니라 앱 전체 종료다. 알림/집중 설정 같은
   // 보조 창이 남아 있어도 window-all-closed를 기다리지 않고 트레이까지 없앤다.
@@ -597,6 +600,8 @@ const focusSession = {
   broadcastTimer: null,
   driftStartedAt: null, // ms epoch — 지금 이탈 중이면 그 시작 시각, 아니면 null
   driftAppName: null,
+  currentDriftDestination: null,
+  driftDestinations: [],
   snoozedUntil: 0, // 이 시각까지는 재알림하지 않음
   ignoredCurrentDrift: false, // 이번 이탈에서 "무시하기"를 누른 적이 있는지
   pendingReturnApp: null, // 무시하기 후 자연 복귀를 감지했을 때의 appInfo(확인 전 임시 보관)
@@ -821,6 +826,35 @@ function setCurrentState(state, now = Date.now()) {
   focusSession.currentState = state;
   // 게이지는 pollFocus가 상태(집중/이탈/자기창)에 맞는 mode로 updateGauge()를
   // 호출해 갱신한다 — 집중 앱에선 키/마우스 활동, 이탈 중엔 무조건 하강.
+}
+
+function cleanDriftLabel(value) {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  return cleaned ? cleaned.slice(0, 160) : null;
+}
+
+function finishCurrentDriftDestination(now = Date.now()) {
+  const current = focusSession.currentDriftDestination;
+  if (!current) return;
+  focusSession.driftDestinations.push({
+    ...current,
+    endedAt: now,
+    durationMs: Math.max(0, now - current.startedAt),
+  });
+  // 비정상적으로 긴 세션에서도 session_end payload가 무한히 커지지 않게 제한한다.
+  if (focusSession.driftDestinations.length > 200) focusSession.driftDestinations.shift();
+  focusSession.currentDriftDestination = null;
+}
+
+function updateDriftDestination(windowInfo, pageLabel, now = Date.now()) {
+  const appName = cleanDriftLabel(windowInfo?.owner?.name) || '다른 앱';
+  const screenTitle = cleanDriftLabel(pageLabel || windowInfo?.title);
+  const signature = `${appName}\n${screenTitle || ''}`;
+  if (focusSession.currentDriftDestination?.signature === signature) return;
+
+  finishCurrentDriftDestination(now);
+  focusSession.currentDriftDestination = { appName, screenTitle, startedAt: now, signature };
 }
 
 // React에 보낼 현재 상태 스냅샷. 진행 중인 구간까지 반영하려고 먼저 정산한다.
@@ -1154,6 +1188,7 @@ async function pollFocus() {
     // 보는 건 이탈도 집중도 아님). 게이지는 'hold'로 유지한다.
     // 1) 우리 창이 포커스됐으면(트레이 열기/클릭) 바로 self.
     if (BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused())) {
+      finishCurrentDriftDestination();
       updateGauge('hold');
       setCurrentState('self');
       return;
@@ -1167,6 +1202,7 @@ async function pollFocus() {
     //    isFocused()만 믿으면 알트탭 진입 순간 우리 창을 '딴 앱'으로 오판해 이탈로
     //    잡히는 버그가 있었다 — 활성 창 소유 프로세스가 우리 pid면 self로 처리.
     if (info?.owner?.processId != null && info.owner.processId === process.pid) {
+      finishCurrentDriftDestination();
       updateGauge('hold');
       setCurrentState('self');
       return;
@@ -1199,6 +1235,7 @@ async function pollFocus() {
 
     if (onFocusApp) {
       if (focusSession.ignoredCurrentDrift) {
+        finishCurrentDriftDestination(now);
         // 무시하기를 누른 이탈에서 돌아온 경우엔 자동으로 이탈 종료 처리하지
         // 않는다 — "재개하기"를 눌러 명시적으로 확인해야 실제로 집중을
         // 재개한 것으로 본다. 확인 전까지는 이탈 상태(및 통계)를 그대로 유지.
@@ -1222,6 +1259,7 @@ async function pollFocus() {
       // 이탈에서 집중으로 복귀 — 돌아오기까지 걸린 시간을 기록하고 새 집중
       // streak을 시작한다.
       if (focusSession.driftStartedAt) {
+        finishCurrentDriftDestination(now);
         focusSession.lastReturnMs = now - focusSession.driftStartedAt;
         logFocusEvent('drift_end', { durationMs: focusSession.lastReturnMs });
       }
@@ -1248,6 +1286,7 @@ async function pollFocus() {
       focusSession.driftCount += 1;
       logFocusEvent('drift_start', { toApp: focusSession.driftAppName, viaPageClassification: Boolean(pageDriftLabel) });
     }
+    updateDriftDestination(info, pageDriftLabel, now);
 
     const driftMs = now - focusSession.driftStartedAt;
     const shouldAlert = driftMs >= DRIFT_ALERT_MS && now >= focusSession.snoozedUntil && !alertWindow;
@@ -1282,6 +1321,8 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   focusSession.focusAppIds = new Set(focusApps.map((a) => a.appId));
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
+  focusSession.currentDriftDestination = null;
+  focusSession.driftDestinations = [];
   focusSession.snoozedUntil = 0;
   focusSession.ignoredCurrentDrift = false;
   focusSession.pendingReturnApp = null;
@@ -1351,6 +1392,7 @@ function stopFocusSession() {
   const endedAt = Date.now();
   accrueStats(endedAt);
   recordFocusTimeline(endedAt, true);
+  finishCurrentDriftDestination(endedAt);
   const activeMs = focusSession.totalFocusMs + focusSession.totalDriftMs;
   const averageFocusMs = focusSession.focusSegmentCount > 0
     ? Math.round(focusSession.totalFocusMs / focusSession.focusSegmentCount)
@@ -1368,6 +1410,7 @@ function stopFocusSession() {
     focusSegmentCount: focusSession.focusSegmentCount,
     focusRate: activeMs > 0 ? Math.round((focusSession.totalFocusMs / activeMs) * 100) : 0,
     driftCount: focusSession.driftCount,
+    driftDestinations: focusSession.driftDestinations.map(({ signature, ...destination }) => ({ ...destination })),
     timeline: focusSession.timeline.map((point) => ({ ...point })),
   };
   logFocusEvent('session_end', {
@@ -1379,6 +1422,7 @@ function stopFocusSession() {
     focusSegmentCount: focusSession.focusSegmentCount,
     focusRate: focusSession.lastCompletedSummary.focusRate,
     totalElapsedMs: focusSession.lastCompletedSummary.totalElapsedMs,
+    driftDestinations: focusSession.lastCompletedSummary.driftDestinations,
     timeline: focusSession.lastCompletedSummary.timeline,
   });
 
@@ -1391,6 +1435,8 @@ function stopFocusSession() {
   focusSession.taskTitle = null;
   focusSession.driftStartedAt = null;
   focusSession.driftAppName = null;
+  focusSession.currentDriftDestination = null;
+  focusSession.driftDestinations = [];
   focusSession.ignoredCurrentDrift = false;
   focusSession.pendingReturnApp = null;
   focusSession.focusStreakStartedAt = null;
@@ -1416,6 +1462,7 @@ function startBreak(minutes) {
   if (focusSession.status !== 'focusing') return;
 
   const now = Date.now();
+  finishCurrentDriftDestination(now);
   setCurrentState('break', now); // 이전 상태 정산 후 휴식 집계 시작
   focusSession.status = 'onBreak';
   focusSession.driftStartedAt = null;
@@ -1556,6 +1603,7 @@ ipcMain.on('alert-action', (event, action) => {
     focusSession.ignoredCurrentDrift = true;
   } else if (action.actionId === 'confirm_resume') {
     const now = Date.now();
+    finishCurrentDriftDestination(now);
     if (focusSession.driftStartedAt) {
       focusSession.lastReturnMs = now - focusSession.driftStartedAt;
       logFocusEvent('drift_end', { durationMs: focusSession.lastReturnMs, confirmedManually: true });

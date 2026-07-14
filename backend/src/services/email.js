@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 
 // resend.dev 도메인은 별도 도메인 인증 없이 바로 테스트 가능 (실제 서비스 전환 시 자체 도메인으로 교체)
-const FROM = 'Zonemate <onboarding@resend.dev>';
+const DEFAULT_FROM = 'Zonemate <onboarding@resend.dev>';
 
 // Resend는 생성자에서 API 키가 없으면 즉시 throw 하기 때문에, 모듈 로드
 // 시점(import)에 인스턴스화하면 RESEND_API_KEY가 없을 때 서버 전체가 죽는다.
@@ -14,19 +14,30 @@ export async function sendVerificationCode(email, code) {
   // 가입/로그인 플로우가 실제로 동작한다.
   // (실서비스 전환 시: RESEND_API_KEY 발급 + 자체 도메인 인증 필요.
   //  resend.dev 샌드박스는 계정 소유자 본인 메일로만 발송된다.)
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
     console.log(`\n[개발 모드 · 이메일 미설정] ${email} 인증번호: ${code}\n`);
     return { delivered: false, devCode: code };
   }
-  const resend = new Resend(process.env.RESEND_API_KEY);
+
+  const from = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM;
+  const resend = new Resend(apiKey);
   const { error } = await resend.emails.send({
-    from: FROM,
+    from,
     to: email,
     subject: '[Zonemate] 이메일 인증번호',
     html: `<p>인증번호는 <b>${code}</b> 입니다. 10분 안에 입력해주세요.</p>`,
   });
   if (error) {
+    console.error('[email] Resend 전송 실패', {
+      name: error.name,
+      message: error.message,
+      statusCode: error.statusCode,
+      from,
+      to: email,
+    });
     throw new Error(error.message || '이메일 전송에 실패했어요');
   }
+
   return { delivered: true };
 }
