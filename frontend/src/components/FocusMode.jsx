@@ -155,10 +155,7 @@ export default function FocusMode({ state, now, controls }) {
           <Stat label="총 집중 시간" value={formatDuration(totalFocusMs)} tone="focus" />
           <Stat label="총 휴식 시간" value={formatDuration(totalBreakMs)} tone="break" />
           <Stat label="딴짓한 시간" value={formatDuration(totalDriftMs)} tone="drift" />
-          <Stat
-            label="최근 복귀 소요"
-            value={!isMirror && state.lastReturnMs != null ? formatDuration(state.lastReturnMs) : '—'}
-          />
+          <Stat label="총 경과 시간" value={formatDuration(elapsedMs)} />
           <Stat label="벗어난 횟수" value={`${isMirror ? 0 : (state.driftCount || 0)}회`} />
         </div>
 
