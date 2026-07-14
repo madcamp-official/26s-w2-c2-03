@@ -50,8 +50,8 @@ public class FocusShieldModule: Module {
       switch AuthorizationCenter.shared.authorizationStatus {
       case .notDetermined: return "notDetermined"
       case .denied: return "denied"
-      case .approved: return "approved"
-      @unknown default: return "notDetermined"
+      // .approved 및 iOS 26+의 .approvedWithDataAccess 등 승인 계열은 모두 승인으로 본다.
+      default: return "approved"
       }
     }
 
