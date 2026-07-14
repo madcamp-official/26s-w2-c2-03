@@ -14,8 +14,6 @@ export async function sendVerificationCode(email, code) {
   // 가입/로그인 플로우가 실제로 동작한다.
   // (실서비스 전환 시: RESEND_API_KEY 발급 + 자체 도메인 인증 필요.
   //  resend.dev 샌드박스는 계정 소유자 본인 메일로만 발송된다.)
-  import { Resend } from 'resend';
-  
   if (!process.env.RESEND_API_KEY) {
     console.log(`\n[개발 모드 · 이메일 미설정] ${email} 인증번호: ${code}\n`);
     return { delivered: false, devCode: code };
