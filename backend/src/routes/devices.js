@@ -31,6 +31,8 @@ router.post('/pairing-code', (req, res) => {
   const expiresAt = new Date(Date.now() + PAIRING_CODE_TTL_MIN * 60 * 1000).toISOString();
   db.prepare('INSERT INTO pairing_codes (code, user_id, expires_at) VALUES (?, ?, ?)')
     .run(code, req.user.id, expiresAt);
+  // [임시 진단] 어느 계정이 이 코드를 발급했는지.
+  console.log('[pairing-code] issued code=', code, 'owner=', String(req.user.id).slice(0, 8));
 
   res.json({ code, expiresInSec: PAIRING_CODE_TTL_MIN * 60 });
 });
@@ -45,6 +47,13 @@ router.post('/pair', (req, res) => {
   }
 
   const pending = db.prepare('SELECT * FROM pairing_codes WHERE code = ?').get(code);
+  // [임시 진단] 안드로이드 "코드 안 맞음" 원인 추적 — 코드 소유 계정과
+  // 입력 계정이 다른지(=다른 계정 로그인) 확인용. 원인 파악 후 제거.
+  console.log('[pair] code=', code, 'platform=', platform,
+    'requester=', String(req.user.id).slice(0, 8),
+    'codeOwner=', pending ? String(pending.user_id).slice(0, 8) : 'NONE',
+    'used=', pending ? pending.used : '-',
+    'match=', pending ? (pending.user_id === req.user.id) : false);
   if (!pending || pending.used || pending.user_id !== req.user.id) {
     return res.status(400).json({ error: '코드가 올바르지 않아요' });
   }

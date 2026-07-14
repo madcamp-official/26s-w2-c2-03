@@ -25,6 +25,25 @@ try {
   // 미설치(개발/비Windows) — 무시
 }
 
+// 단일 인스턴스만 허용한다. 앱이 이미 떠 있는데 또 실행되면 백엔드/입력
+// 트래커/집중 세션이 중복 기동돼 "세션이 여러 개 켜지고" 미러링·로그인이
+// 꼬이는 문제가 생긴다. 두 번째 실행은 조용히 종료하고 기존 창을 앞으로
+// 가져온다.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
+}
+
 // Squirrel이 만든 시작 메뉴 바로가기의 AppUserModelID와 실행 중인 창의 ID가
 // 같아야 Windows 작업표시줄이 바로가기/EXE 아이콘으로 창을 그룹화한다.
 // 이 값이 없으면 Electron 프로세스 그룹으로 인식돼 기본 아이콘이 남을 수 있다.
@@ -1563,6 +1582,9 @@ ipcMain.handle('get-focus-state', () => buildFocusSnapshot());
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 app.whenReady().then(async () => {
+  // 단일 인스턴스 잠금을 못 얻은 두 번째 실행이면 아무것도 띄우지 않는다
+  // (위에서 app.quit() 호출됨) — 백엔드/트래커 중복 기동 방지.
+  if (!gotSingleInstanceLock) return;
   // 개발 중인 macOS 앱은 패키징된 .icns가 없으므로 Dock 아이콘을 직접 지정한다.
   // 패키징본에서는 forge.config.js의 icon.icns 설정을 사용한다.
   if (process.platform === 'darwin' && !app.isPackaged) {
@@ -1607,13 +1629,20 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  // 트레이 상주 앱이라 메인 창을 닫아도 백그라운드(트레이)는 계속 살아있게
-  // 한다 — 집중 세션/알림이 메인 창 없이도 계속 동작해야 하므로 macOS 여부와
-  // 관계없이 앱을 종료하지 않는다. 완전 종료는 트레이 메뉴의 "종료"로만.
+  // X(창 닫기)를 누르면 트레이에 남기지 않고 앱을 완전히 종료한다. 백그라운드
+  // 인스턴스가 트레이에 남아 있으면 재실행 시 세션이 중복되고 로그인이 꼬이는
+  // 문제가 있어서, 창을 닫으면 before-quit에서 집중 세션 종료(서버에 idle
+  // 반영)·백엔드/트래커 정리까지 함께 끝낸다.
+  app.quit();
 });
 
 app.on('before-quit', () => {
-  stopFocusSession();
+  // 이 기기가 직접 시작한(소유한) 세션만 서버에 종료를 알린다. 다른 기기
+  // (모바일)의 세션을 미러링만 하던 중이라면, 앱을 닫는다고 그 기기의 집중을
+  // 멈춰선 안 되므로 서버에 stop을 보내지 않는다.
+  if (focusSession.status !== 'idle' && !focusSession.isMirror) {
+    stopFocusSession();
+  }
   if (backendProcess) backendProcess.kill();
   if (frontendProcess) frontendProcess.kill();
   stopOsTracker();
