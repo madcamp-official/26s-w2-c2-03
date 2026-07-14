@@ -311,13 +311,17 @@ function applyRemoteMirror(session) {
   }
 }
 
-function pollRemoteMirror() {
+// 5초마다 서버의 계정 세션과 이 기기 상태를 맞춘다(GET 후 판단). 세 경우:
+//  1) 내가 이 세션의 소유자(직접 시작, isMirror=false)
+//     - 서버가 idle이면 = 다른 기기가 원격에서 종료한 것 -> 나도 종료.
+//     - 아니면 내 상태를 서버에 다시 밀어 넣어(assert) STALE 되지 않게 유지.
+//  2) 내가 미러링 중(다른 기기 세션을 따라 보여주는 중) -> 원격을 그대로 반영.
+//  3) 내가 idle -> 다른 기기가 시작했으면 미러링 시작.
+// GET->결정을 한 경로로 모아서, 예전처럼 blind push와 stop이 서로 덮어써
+// 종료가 씹히던 레이스를 없앤다(그래서 startBroadcasting의 주기 push는 제거).
+function syncFocusSession() {
   if (!currentAuthToken) return;
-  // 이 기기가 이미 실제 세션(직접 시작)을 진행 중이면 그쪽이 우선이고,
-  // 이 기기 상태를 서버로 밀어 넣는 건 이미 pushLiveFocusSession이 하고
-  // 있으니 여기서는 손대지 않는다. isMirror 중일 때만(=진짜 idle이거나
-  // 이미 미러링 중일 때만) 원격 상태를 계속 확인한다.
-  if (focusSession.status !== 'idle' && !focusSession.isMirror) return;
+  const iAmOwner = focusSession.status !== 'idle' && !focusSession.isMirror;
   const url = `${BACKEND_ORIGIN}/api/focus-session`;
   const req = httpClientFor(url).request(url, authedRequestOptions('GET'), (res) => {
     let body = '';
@@ -325,7 +329,17 @@ function pollRemoteMirror() {
     res.on('end', () => {
       try {
         const { session } = JSON.parse(body);
-        applyRemoteMirror(session);
+        if (iAmOwner) {
+          // 소유자인데 서버가 idle이면 다른 기기가 종료를 요청한 것.
+          if (!session || session.status === 'idle') {
+            console.log('[electron] 다른 기기에서 집중 종료 요청 감지 — 세션을 종료합니다.');
+            stopFocusSession();
+          } else {
+            pushLiveFocusSession(focusSession.status); // 내 상태 유지(assert)
+          }
+          return;
+        }
+        applyRemoteMirror(session); // idle 또는 미러링 중 -> 원격을 따른다
       } catch {
         // 파싱 실패는 조용히 다음 tick에 재시도 — 미러링은 부가 기능
       }
@@ -806,24 +820,14 @@ function broadcastFocusState() {
   }
 }
 
-// 실시간 세션 미러링(모바일이 폴링) 푸시 간격 — 1초 브로드캐스트 타이머에
-// 얹되, 서버에는 이보다 훨씬 뜸하게만 보낸다(매초 PUT은 과함).
-const LIVE_SESSION_PUSH_INTERVAL_MS = 5000;
-let lastLiveSessionPushAt = 0;
-
 function startBroadcasting() {
   if (focusSession.broadcastTimer) clearInterval(focusSession.broadcastTimer);
   // 1초마다: 선제 알림(과몰입/집중 저하) 판단 후 상태를 React로 브로드캐스트.
-  // pollFocus는 status==='focusing'일 때만 돌아서 휴식 중엔 반영이 안 되므로,
-  // 상태 무관하게 도는 이 타이머에서 실시간 미러링 푸시도 같이 처리한다.
+  // 서버로의 실시간 세션 push는 여기서 하지 않는다 — syncFocusSession(5초)이
+  // GET->결정 한 경로에서 소유자 상태 assert까지 함께 처리한다(종료 레이스 방지).
   focusSession.broadcastTimer = setInterval(() => {
     evaluateWellbeingAlerts();
     broadcastFocusState();
-    const now = Date.now();
-    if (now - lastLiveSessionPushAt >= LIVE_SESSION_PUSH_INTERVAL_MS) {
-      lastLiveSessionPushAt = now;
-      pushLiveFocusSession(focusSession.status);
-    }
   }, BROADCAST_INTERVAL_MS);
 }
 
@@ -1249,8 +1253,7 @@ function startFocusSession(focusApps, targetMinutes = null, taskTitle = null) {
   if (focusSession.pollTimer) clearInterval(focusSession.pollTimer);
   focusSession.pollTimer = setInterval(pollFocus, POLL_INTERVAL_MS);
   startBroadcasting();
-  lastLiveSessionPushAt = Date.now();
-  pushLiveFocusSession('focusing'); // 5초 주기까지 안 기다리고 시작을 바로 반영
+  pushLiveFocusSession('focusing'); // 5초 sync 주기까지 안 기다리고 시작을 바로 반영
 
   console.log('[electron] 집중 세션 시작 — 집중 앱:', focusApps.map((a) => a.name).join(', '));
   refreshTray();
@@ -1363,7 +1366,6 @@ function startBreak(minutes) {
   console.log(`[electron] 휴식 시작 — ${minutes}분`);
   refreshTray();
   broadcastFocusState();
-  lastLiveSessionPushAt = Date.now();
   pushLiveFocusSession('onBreak');
 }
 
@@ -1385,7 +1387,6 @@ function endBreak(reason) {
   console.log(`[electron] 휴식 종료 (${reason})`);
   refreshTray();
   broadcastFocusState();
-  lastLiveSessionPushAt = Date.now();
   pushLiveFocusSession('focusing');
 }
 
@@ -1581,7 +1582,7 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
-  setInterval(pollRemoteMirror, REMOTE_MIRROR_POLL_MS);
+  setInterval(syncFocusSession, REMOTE_MIRROR_POLL_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
