@@ -52,10 +52,26 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 
-const WINDOW_ICON_PATH = path.join(
-  __dirname,
-  process.platform === 'win32' ? 'icon.ico' : 'icon-1024.png',
-);
+// EXE/시작 메뉴 아이콘은 Forge가 icon.ico를 삽입하고, 실행 중인 창의 HICON은
+// Electron이 확실히 디코딩할 수 있는 PNG NativeImage를 직접 사용한다.
+// 단순 문자열 경로만 넘기면 일부 Windows 환경에서 창 아이콘 로드에 실패해
+// 작업표시줄에 기본 Electron 아이콘이 남을 수 있다.
+const WINDOW_ICON_PATH = path.join(__dirname, 'icon-1024.png');
+let windowIconImage = null;
+
+function getWindowIcon() {
+  if (!windowIconImage || windowIconImage.isEmpty()) {
+    windowIconImage = nativeImage.createFromPath(WINDOW_ICON_PATH);
+  }
+  return windowIconImage;
+}
+
+function applyWindowIcon(win) {
+  if (process.platform !== 'darwin' && win && !win.isDestroyed()) {
+    const icon = getWindowIcon();
+    if (!icon.isEmpty()) win.setIcon(icon);
+  }
+}
 
 // 자동 업데이트: 설치된 앱이 재설치 없이 GitHub Releases의 새 버전을 받아
 // 스스로 갱신한다(update.electronjs.org 경유, public 저장소 필요).
@@ -216,7 +232,7 @@ function createWindow() {
     title: 'Zonemate',
     // Windows는 작업표시줄용 멀티사이즈 ICO, Linux는 PNG를 사용한다.
     // macOS 패키징본의 Dock 아이콘은 forge.config.js의 icon.icns가 우선한다.
-    icon: WINDOW_ICON_PATH,
+    icon: getWindowIcon(),
     webPreferences: {
       // React 앱(웹)에 집중 세션 제어/실시간 상태 브리지를 노출한다.
       preload: path.join(__dirname, 'main-preload.js'),
@@ -224,6 +240,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  applyWindowIcon(mainWindow);
   mainWindow.loadURL(FRONTEND_URL);
   // 창이 준비되면 현재 상태를 즉시 한 번 보내 초기 화면을 맞춘다.
   mainWindow.webContents.on('did-finish-load', () => {
@@ -407,7 +424,7 @@ function showFocusAlert(alert) {
   alertWindow = new BrowserWindow({
     width,
     height,
-    icon: WINDOW_ICON_PATH,
+    icon: getWindowIcon(),
     x: workArea.x + workArea.width - width - margin,
     y: workArea.y + workArea.height - height - margin,
     frame: false,
@@ -429,6 +446,7 @@ function showFocusAlert(alert) {
       nodeIntegration: false,
     },
   });
+  applyWindowIcon(alertWindow);
   // 활성 창 제목만으로 분류한 알림은 다음 poll에서 즉시 닫히지 않도록
   // 출처와 표시 시작 시각을 창에 보관한다.
   alertWindow.zonemateAlertType = alert.type || null;
@@ -969,7 +987,7 @@ function openFocusSetup() {
     width: 460,
     height: 560,
     title: '집중 모드 시작',
-    icon: WINDOW_ICON_PATH,
+    icon: getWindowIcon(),
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'focus-setup-preload.js'),
@@ -977,6 +995,7 @@ function openFocusSetup() {
       nodeIntegration: false,
     },
   });
+  applyWindowIcon(focusSetupWindow);
   focusSetupWindow.loadFile(path.join(__dirname, 'focus-setup.html'));
   focusSetupWindow.on('closed', () => {
     focusSetupWindow = null;
@@ -993,7 +1012,7 @@ function openBreakPicker() {
     width: 360,
     height: 340,
     title: '휴식하기',
-    icon: WINDOW_ICON_PATH,
+    icon: getWindowIcon(),
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'break-picker-preload.js'),
@@ -1001,6 +1020,7 @@ function openBreakPicker() {
       nodeIntegration: false,
     },
   });
+  applyWindowIcon(breakPickerWindow);
   breakPickerWindow.loadFile(path.join(__dirname, 'break-picker.html'));
   breakPickerWindow.on('closed', () => {
     breakPickerWindow = null;
