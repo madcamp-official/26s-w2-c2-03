@@ -483,6 +483,19 @@ input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
 .focus-modal-actions { display: flex; gap: 8px; }
 .focus-modal-actions .btn-primary { margin-top: 0; }
 
+/* ---- 회원탈퇴 ---- */
+.account-delete-trigger { color: var(--urgent); }
+.account-deletion-modal { max-width: 500px; }
+.account-deletion-body { padding: 4px 22px 20px; }
+.account-deletion-input {
+  width: 100%; margin-top: 8px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--ground); color: var(--text-1); font: inherit;
+}
+.account-deletion-input:focus { outline: 2px solid var(--urgent); outline-offset: 1px; }
+.account-deletion-body .error-text { margin: 10px 0 0; }
+.btn-danger:disabled { opacity: .45; cursor: not-allowed; background: var(--surface); color: var(--urgent); }
+
 /* ---- 집중 중 전체화면 대시보드 ---- */
 .focus-mode {
   position: fixed; inset: 0; z-index: 50;

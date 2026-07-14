@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { fetchMe, logout as apiLogout } from '../api.js';
+import { deleteAccount as apiDeleteAccount, fetchMe, logout as apiLogout } from '../api.js';
 
 const AuthContext = createContext(null);
 
@@ -38,8 +38,14 @@ export function AuthProvider({ children }) {
     window.zonemate?.clearAuthToken?.();
   }
 
+  async function deleteAccount() {
+    await apiDeleteAccount();
+    setUser(null);
+    window.zonemate?.clearAuthToken?.();
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ user, loading, refresh, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

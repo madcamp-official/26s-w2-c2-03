@@ -388,6 +388,7 @@ function showFocusAlert(alert) {
   alertWindow = new BrowserWindow({
     width,
     height,
+    icon: WINDOW_ICON_PATH,
     x: workArea.x + workArea.width - width - margin,
     y: workArea.y + workArea.height - height - margin,
     frame: false,
@@ -949,6 +950,7 @@ function openFocusSetup() {
     width: 460,
     height: 560,
     title: '집중 모드 시작',
+    icon: WINDOW_ICON_PATH,
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'focus-setup-preload.js'),
@@ -972,6 +974,7 @@ function openBreakPicker() {
     width: 360,
     height: 340,
     title: '휴식하기',
+    icon: WINDOW_ICON_PATH,
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'break-picker-preload.js'),

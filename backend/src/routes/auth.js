@@ -276,6 +276,38 @@ router.post('/nickname', requireAuth, (req, res) => {
   res.json({ user: toPublicUser(user) });
 });
 
+// 회원탈퇴: 사용자 본체를 지우면 외래키가 연결된 플래너/캘린더/기기/
+// 실시간 집중 상태는 ON DELETE CASCADE로 함께 삭제된다. focus_events와
+// email_verifications는 users 외래키가 없으므로 트랜잭션 안에서 직접 지운다.
+router.delete('/account', requireAuth, (req, res) => {
+  if (req.body?.confirmation !== '탈퇴') {
+    return res.status(400).json({ error: '회원탈퇴 확인 문구가 올바르지 않아요' });
+  }
+
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    db.prepare('DELETE FROM focus_events WHERE user_id = ?').run(req.user.id);
+    if (req.user.email) {
+      db.prepare('DELETE FROM email_verifications WHERE email = ?').run(req.user.email);
+    }
+    const result = db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
+    if (result.changes !== 1) throw new Error('삭제할 사용자를 찾지 못했어요');
+    db.exec('COMMIT');
+
+    res.clearCookie('token');
+    res.clearCookie('authToken');
+    return res.json({ ok: true });
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // BEGIN 이전에 실패했거나 이미 종료된 트랜잭션
+    }
+    console.error('[auth] 회원탈퇴 실패:', err);
+    return res.status(500).json({ error: '회원탈퇴를 처리하지 못했어요' });
+  }
+});
+
 router.post('/logout', (req, res) => {
   res.clearCookie('token');
   res.clearCookie('authToken');

@@ -9,6 +9,7 @@ import FocusStartModal from '../components/FocusStartModal.jsx';
 import FocusSummaryModal from '../components/FocusSummaryModal.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import DevicePairingModal from '../components/DevicePairingModal.jsx';
+import AccountDeletionModal from '../components/AccountDeletionModal.jsx';
 
 let eventCounter = 1;
 function makeEventId() {
@@ -69,13 +70,14 @@ export default function PlannerPage() {
   // 먼저 세워두면 두 번째 호출이 곧바로 걸러진다 (기록이 빈 목록으로
   // 덮어써지는 걸 방지).
   const closingRef = useRef(false);
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
 
   // 데스크톱(일렉트론)에서만 켜지는 집중 모드. 웹 브라우저에서는 isDesktop이
   // false라 아무 것도 렌더링하지 않는다.
   const { isDesktop, state: focusState, now: focusNow, controls: focusControls } = useFocusSession();
   const [focusModalOpen, setFocusModalOpen] = useState(false);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
+  const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
   const focusActive = Boolean(focusState && focusState.status !== 'idle');
   const completedFocusSummary = focusState?.lastCompletedSummary || null;
 
@@ -192,6 +194,9 @@ export default function PlannerPage() {
             <button type="button" className="btn-ghost" onClick={() => setDeviceModalOpen(true)}>기기 연동</button>
             <ThemeToggle />
             <button type="button" className="btn-ghost" onClick={logout}>로그아웃</button>
+            <button type="button" className="btn-ghost account-delete-trigger" onClick={() => setAccountDeletionOpen(true)}>
+              회원탈퇴
+            </button>
           </div>
         </header>
 
@@ -200,6 +205,9 @@ export default function PlannerPage() {
         )}
         {deviceModalOpen && (
           <DevicePairingModal onClose={() => setDeviceModalOpen(false)} />
+        )}
+        {accountDeletionOpen && (
+          <AccountDeletionModal onClose={() => setAccountDeletionOpen(false)} onDelete={deleteAccount} />
         )}
 
         <nav className="page-nav">

@@ -41,6 +41,22 @@ async function putJson(url, body) {
   return res.json();
 }
 
+async function deleteJson(url, body) {
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || '삭제에 실패했어요');
+  }
+
+  return res.json();
+}
+
 export function generatePlanChat({ messages, forceFinalize }) {
   return postJson('/api/plan', { messages, forceFinalize });
 }
@@ -97,6 +113,10 @@ export function fetchMe() {
 
 export function logout() {
   return postJson('/api/auth/logout', {});
+}
+
+export function deleteAccount() {
+  return deleteJson('/api/auth/account', { confirmation: '탈퇴' });
 }
 
 // ---- 기기 연동 ----
