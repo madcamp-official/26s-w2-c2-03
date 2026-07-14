@@ -32,25 +32,16 @@ function toPublicSession(row) {
   };
 }
 
-// [임시 진단] 미러링이 안 되는 원인(누가 무엇을 보내는지)을 stdout으로 추적.
-// 원인 파악 후 제거한다.
-function dbg(...args) {
-  console.log('[focus-session]', ...args);
-}
-
 // 다른 기기(들)가 "지금 이 계정이 뭘 하고 있는지" 보려고 폴링한다.
 router.get('/', (req, res) => {
   const row = db.prepare('SELECT * FROM focus_live_sessions WHERE user_id = ?').get(req.user.id);
-  const pub = toPublicSession(row);
-  dbg('GET  user=', String(req.user.id).slice(0, 8), '-> status=', pub.status, 'source=', pub.source, 'stale=', pub.stale);
-  res.json({ session: pub });
+  res.json({ session: toPublicSession(row) });
 });
 
 // 집중/휴식 상태가 바뀔 때마다(또는 주기적으로) 자기 상태를 밀어 넣는다.
 // 데스크톱은 pollFocus tick마다, 모바일은 수동 타이머 시작/틱마다 호출.
 router.put('/', (req, res) => {
   const { status, taskTitle, targetMinutes, source, gauge, currentState, startedAt } = req.body || {};
-  dbg('PUT  user=', String(req.user.id).slice(0, 8), 'status=', status, 'source=', source, 'task=', taskTitle);
   if (!['idle', 'focusing', 'onBreak'].includes(status)) {
     return res.status(400).json({ error: 'status가 올바르지 않아요' });
   }
@@ -73,7 +64,6 @@ router.put('/', (req, res) => {
 // 집중을 멈출 때 명시적으로 idle로 되돌린다(다음 폴링에서 바로 반영되게 —
 // STALE_MS까지 기다리지 않아도 된다).
 router.post('/stop', (req, res) => {
-  dbg('STOP user=', String(req.user.id).slice(0, 8));
   db.prepare(`
     INSERT INTO focus_live_sessions (user_id, status, updated_at)
     VALUES (?, 'idle', datetime('now', 'localtime'))
