@@ -8,6 +8,7 @@ import FocusMode from '../components/FocusMode.jsx';
 import FocusStartModal from '../components/FocusStartModal.jsx';
 import FocusSummaryModal from '../components/FocusSummaryModal.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import DevicePairingModal from '../components/DevicePairingModal.jsx';
 
 let eventCounter = 1;
 function makeEventId() {
@@ -74,6 +75,7 @@ export default function PlannerPage() {
   // false라 아무 것도 렌더링하지 않는다.
   const { isDesktop, state: focusState, now: focusNow, controls: focusControls } = useFocusSession();
   const [focusModalOpen, setFocusModalOpen] = useState(false);
+  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const focusActive = Boolean(focusState && focusState.status !== 'idle');
   const completedFocusSummary = focusState?.lastCompletedSummary || null;
 
@@ -187,6 +189,7 @@ export default function PlannerPage() {
               </button>
             )}
             <span className="mono">{user?.nickname}님</span>
+            <button type="button" className="btn-ghost" onClick={() => setDeviceModalOpen(true)}>기기 연동</button>
             <ThemeToggle />
             <button type="button" className="btn-ghost" onClick={logout}>로그아웃</button>
           </div>
@@ -194,6 +197,9 @@ export default function PlannerPage() {
 
         {focusModalOpen && (
           <FocusStartModal controls={focusControls} tasks={tasks} onClose={() => setFocusModalOpen(false)} />
+        )}
+        {deviceModalOpen && (
+          <DevicePairingModal onClose={() => setDeviceModalOpen(false)} />
         )}
 
         <nav className="page-nav">

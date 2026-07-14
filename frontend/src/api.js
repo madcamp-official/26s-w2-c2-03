@@ -98,3 +98,36 @@ export function fetchMe() {
 export function logout() {
   return postJson('/api/auth/logout', {});
 }
+
+// ---- 기기 연동 ----
+
+export function requestPairingCode() {
+  return postJson('/api/devices/pairing-code', {});
+}
+
+export function fetchDevices() {
+  return getJson('/api/devices');
+}
+
+export async function renameDevice(id, name) {
+  const res = await fetch(`/api/devices/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || '이름 변경에 실패했어요');
+  }
+  return res.json();
+}
+
+export async function removeDevice(id) {
+  const res = await fetch(`/api/devices/${id}`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || '연동 해제에 실패했어요');
+  }
+  return res.json();
+}

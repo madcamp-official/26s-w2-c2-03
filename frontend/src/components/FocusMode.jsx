@@ -56,10 +56,62 @@ function Stat({ label, value, tone }) {
   );
 }
 
+// 다른 기기(모바일)가 시작한 집중을 따라 보여주는 단순화된 화면 — 이 기기는
+// 앱을 추적하지 않으므로 게이지/이탈 통계 없이 지금 하는 일과 경과 시간만 보여준다.
+function MirrorFocusMode({ state, now, controls }) {
+  const onBreak = state.status === 'onBreak';
+  const elapsedMs = state.sessionStartedAt ? Math.max(0, now - state.sessionStartedAt) : 0;
+
+  return (
+    <div className="focus-mode tone-focus">
+      <div className="focus-mode-inner">
+        <div className="focus-status-pill tone-focus">
+          <span className="dot" />
+          {onBreak ? '휴식 중 (모바일)' : '집중 중 (모바일)'}
+        </div>
+
+        <div className="focus-mascot">
+          <CatFace className="mascot-idle" fill="var(--cat-focus)" />
+        </div>
+
+        {state.taskTitle && (
+          <div className="focus-current-task">
+            <span className="focus-current-task-kicker">지금 하는 일</span>
+            <span className="focus-current-task-title">{state.taskTitle}</span>
+          </div>
+        )}
+
+        <div className="focus-primary">
+          <div className="focus-primary-value num">{formatDuration(elapsedMs)}</div>
+          <div className="focus-primary-label">경과 시간</div>
+        </div>
+
+        {state.targetMinutes ? (
+          <p className="focus-apps-line hint-text">목표 {state.targetMinutes}분</p>
+        ) : null}
+
+        <p className="hint-text" style={{ marginTop: 8 }}>
+          모바일에서 시작한 집중을 따라 보여주는 중이에요. 여기서 멈추면 모바일에서도 같이 끝나요.
+        </p>
+
+        <div className="focus-controls">
+          <button type="button" className="btn-danger" onClick={() => controls.stopFocus()}>
+            집중 종료
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 집중 모드일 때 다른 화면을 전부 덮는 전체화면 대시보드.
 export default function FocusMode({ state, now, controls }) {
   const [showBreakPicker, setShowBreakPicker] = useState(false);
   const [customMin, setCustomMin] = useState('');
+
+  if (state.isMirror) {
+    return <MirrorFocusMode state={state} now={now} controls={controls} />;
+  }
 
   const onBreak = state.status === 'onBreak';
   const drifting = Boolean(state.isDrifting);

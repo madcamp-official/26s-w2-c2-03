@@ -11,12 +11,36 @@ const CODE_TTL_MIN = 10;
 const APP_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
 const API_URL = process.env.API_BASE_URL || 'http://localhost:4000';
 
+// 모바일 클라이언트가 보낸 실제 딥링크 주소를 state에 실어 콜백까지 왕복시킨다.
+// Expo Go에서 실행 중일 때는 app.json의 커스텀 스킴(zonemate://)이 아니라
+// exp://<lan-ip>:8081/--/auth-callback 같은 주소가 실제 딥링크이기 때문에,
+// 고정된 스킴을 하드코딩하면 Expo Go에서는 "주소가 유효하지 않음" 에러가 난다.
+function encodeMobileState(redirectUrl) {
+  return `mobile:${Buffer.from(redirectUrl, 'utf8').toString('base64url')}`;
+}
+function decodeMobileState(state) {
+  if (!state || !state.startsWith('mobile:')) return null;
+  try {
+    return Buffer.from(state.slice('mobile:'.length), 'base64url').toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+// httpOnly 쿠키(token)는 브라우저 fetch(credentials:'include')가 자동으로
+// 실어 보내는 진짜 세션이고, 그 값을 그대로 담은 두 번째 non-httpOnly
+// 쿠키(authToken)는 오직 "Electron 메인 프로세스에게 넘겨주기 위해 렌더러가
+// document.cookie로 읽을 수 있게" 존재한다 — Electron 메인 프로세스는 창의
+// 쿠키 저장소에 접근할 수 없어서(별도 Node 프로세스), 렌더러가 로그인 시
+// 이 값을 읽어 IPC로 건네주면 메인 프로세스가 백엔드에 자기 명의로(집중
+// 이벤트 기록 등) 요청할 수 있다. 두 쿠키는 항상 같은 토큰 값을 담는다.
 function setSessionCookie(res, userId) {
-  res.cookie('token', issueToken(userId), {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  });
+  const token = issueToken(userId);
+  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: SESSION_MAX_AGE_MS });
+  res.cookie('authToken', token, { httpOnly: false, sameSite: 'lax', maxAge: SESSION_MAX_AGE_MS });
+  return token;
 }
 
 function toPublicUser(user) {
@@ -108,8 +132,10 @@ router.post('/email/verify', (req, res) => {
   db.prepare('DELETE FROM email_verifications WHERE email = ?').run(email);
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user) });
+  // 쿠키(웹/데스크톱)에 더해 토큰을 응답 본문에도 실어준다 — 모바일 앱은
+  // 쿠키 대신 이 값을 저장했다가 Authorization 헤더로 보낸다.
+  const token = setSessionCookie(res, user.id);
+  res.json({ user: toPublicUser(user), token });
 });
 
 router.post('/login', (req, res) => {
@@ -118,11 +144,14 @@ router.post('/login', (req, res) => {
   if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
     return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않아요' });
   }
-  setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user) });
+  const token = setSessionCookie(res, user.id);
+  res.json({ user: toPublicUser(user), token });
 });
 
 // ---- 구글 로그인 ----
+// state에 플랫폼을 실어 보내고 콜백에서 그대로 돌려받는다(OAuth 표준
+// 파라미터라 구글/카카오 둘 다 그대로 echo해준다) — 모바일에서 시작한
+// 로그인인지 구분해서, 콜백에서 웹 프론트 대신 앱 딥링크로 보내기 위함.
 
 router.get('/google', (req, res) => {
   const params = new URLSearchParams({
@@ -131,6 +160,9 @@ router.get('/google', (req, res) => {
     response_type: 'code',
     scope: 'openid email profile',
     prompt: 'select_account',
+    ...(req.query.platform === 'mobile' && req.query.redirect_uri
+      ? { state: encodeMobileState(req.query.redirect_uri) }
+      : {}),
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
@@ -160,10 +192,16 @@ router.get('/google/callback', async (req, res) => {
     const profile = await profileRes.json();
 
     const user = upsertOAuthUser({ provider: 'google', providerId: profile.sub, email: profile.email });
-    setSessionCookie(res, user.id);
+    const token = setSessionCookie(res, user.id);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) {
+      return res.redirect(`${mobileRedirect}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
+    }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
     console.error(err);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) return res.redirect(`${mobileRedirect}?error=google`);
     res.redirect(`${APP_URL}/login?error=google`);
   }
 });
@@ -175,6 +213,9 @@ router.get('/kakao', (req, res) => {
     client_id: process.env.KAKAO_REST_API_KEY,
     redirect_uri: `${API_URL}/api/auth/kakao/callback`,
     response_type: 'code',
+    ...(req.query.platform === 'mobile' && req.query.redirect_uri
+      ? { state: encodeMobileState(req.query.redirect_uri) }
+      : {}),
   });
   res.redirect(`https://kauth.kakao.com/oauth/authorize?${params}`);
 });
@@ -205,10 +246,16 @@ router.get('/kakao/callback', async (req, res) => {
     const email = profile.kakao_account?.email || `kakao_${profile.id}@no-email.kakao`;
 
     const user = upsertOAuthUser({ provider: 'kakao', providerId: String(profile.id), email });
-    setSessionCookie(res, user.id);
+    const token = setSessionCookie(res, user.id);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) {
+      return res.redirect(`${mobileRedirect}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
+    }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
     console.error(err);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) return res.redirect(`${mobileRedirect}?error=kakao`);
     res.redirect(`${APP_URL}/login?error=kakao`);
   }
 });
@@ -231,6 +278,7 @@ router.post('/nickname', requireAuth, (req, res) => {
 
 router.post('/logout', (req, res) => {
   res.clearCookie('token');
+  res.clearCookie('authToken');
   res.json({ ok: true });
 });
 
