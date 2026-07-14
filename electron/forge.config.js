@@ -82,4 +82,26 @@ module.exports = {
     // 리눅스 배포가 필요해지면 그때 maker-deb를 devDependencies에 추가하고
     // release.yml에 ubuntu 잡을 함께 넣어야 한다.
   ],
+  plugins: [
+    {
+      // 네이티브 모듈(get-windows)의 .node 바이너리를 asar 밖으로 빼내
+      // 런타임에 로드되게 한다. 이게 없으면 패키징된 앱에서 창 추적이 깨진다.
+      name: '@electron-forge/plugin-auto-unpack-natives',
+      config: {},
+    },
+  ],
+  publishers: [
+    {
+      // 빌드 산출물을 GitHub Release로 올린다. draft:false라 태그 push 시 CI가
+      // 곧바로 "공개" 릴리스를 발행한다(= 설치된 앱이 update.electronjs.org로
+      // 자동 업데이트). 이 설정이 빠지면 forge가 "No publishers configured"로
+      // dmg/exe를 만들기만 하고 업로드하지 않아 릴리스가 생성되지 않는다.
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: { owner: 'madcamp-official', name: '26s-w2-c2-03' },
+        draft: false,
+        prerelease: false,
+      },
+    },
+  ],
 };

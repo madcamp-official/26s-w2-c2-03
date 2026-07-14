@@ -46,7 +46,10 @@ jobs:
         run: npx electron-forge publish --arch=arm64
 
   release-windows:
-    runs-on: windows-latest
+    # windows-latest가 VS2026(내부 버전 "18") 이미지로 바뀌면서 node-gyp가 그
+    # 버전을 인식하지 못해 네이티브 모듈(get-windows) 리빌드가 깨졌다. VS2022가
+    # 든 windows-2022로 고정한다 — v0.1.21 Windows 빌드가 성공했던 환경.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
