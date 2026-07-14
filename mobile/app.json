@@ -9,11 +9,9 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "io.zonemate.mobile",
-      "entitlements": {
-        "com.apple.developer.family-controls": true
-      }
+      "bundleIdentifier": "io.zonemate.mobile"
     },
+    "//": "Family Controls 엔타이틀먼트는 무료 계정에서 서명이 안 돼 임시로 뺐다. 유료 Apple Developer 계정이 생기면 ios.entitlements에 'com.apple.developer.family-controls': true 를 다시 넣고, modules/focus-shield/index.ts의 SHIELD_ENABLED를 true로 바꾸면 앱 차단이 켜진다.",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
