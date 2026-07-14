@@ -55,37 +55,52 @@ function shouldIgnore(file) {
 }
 
 module.exports = {
+  outDir: forgeOutDirectory,
+  // get-windows는 N-API 바이너리라 Electron 43/Node 24에서 이미 로드 검증했다.
+  // 로컬 C++ 툴체인으로 다시 빌드하지 않고 설치된 바이너리를 그대로 사용한다.
+  rebuildConfig: {
+    onlyModules: [],
+  },
   packagerConfig: {
-    // 확장자 없이! Forge가 OS별로 .ico / .icns 자동 선택
+    asar: true,
+    name: 'Zonemate',
+    executableName: 'Zonemate',
+    appBundleId: 'io.zonemate.desktop',
+    // 확장자 없이 지정 — 패키저가 플랫폼별로 .icns(mac)/.ico(win)를 붙인다.
     icon: path.join(__dirname, 'icon'),
+    extraResource: [
+      path.join(__dirname, 'build-resources', 'backend'),
+      path.join(__dirname, 'build-resources', 'frontend'),
+    ],
+    ignore: shouldIgnore,
   },
   makers: [
     {
+      // Windows 설치본(자동 업데이트 지원: Squirrel.Windows). 서명 없이도 동작.
       name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
       config: {
         name: 'zonemate',
         setupExe: 'Zonemate-Setup.exe',
-        setupIcon: path.join(__dirname, 'icon.ico'), // 확장자 필수
-        iconUrl: 'https://raw.githubusercontent.com/.../icon.ico', // 제어판 아이콘용(선택, https 필수)
       },
     },
     {
+      // macOS zip — Squirrel.Mac 자동 업데이트가 소비하는 포맷이자, 서명 없이도
+      // 만들 수 있는 가장 안전한 배포물.
+      name: '@electron-forge/maker-zip',
+      platforms: ['darwin'],
+    },
+    {
+      // macOS .dmg — 더 보기 좋은 다운로드용 설치 이미지.
       name: '@electron-forge/maker-dmg',
+      platforms: ['darwin'],
       config: {
         name: 'Zonemate',
-        icon: path.join(__dirname, 'icon.icns'), // DMG 볼륨 아이콘
       },
     },
-    // 리눅스(.deb) maker는 뺐다 — CI(release.yml)는 mac/Windows만 빌드하는데,
-    // forge는 플랫폼 필터 전에 모든 maker 모듈을 먼저 resolve하므로 설치 안 된
-    // @electron-forge/maker-deb가 있으면 mac/Windows 빌드까지 전부 실패한다.
-    // 리눅스 배포가 필요해지면 그때 maker-deb를 devDependencies에 추가하고
-    // release.yml에 ubuntu 잡을 함께 넣어야 한다.
   ],
   plugins: [
     {
-      // 네이티브 모듈(get-windows)의 .node 바이너리를 asar 밖으로 빼내
-      // 런타임에 로드되게 한다. 이게 없으면 패키징된 앱에서 창 추적이 깨진다.
       name: '@electron-forge/plugin-auto-unpack-natives',
       config: {},
     },
@@ -94,8 +109,7 @@ module.exports = {
     {
       // 빌드 산출물을 GitHub Release로 올린다. draft:false라 태그 push 시 CI가
       // 곧바로 "공개" 릴리스를 발행한다(= 설치된 앱이 update.electronjs.org로
-      // 자동 업데이트). 이 설정이 빠지면 forge가 "No publishers configured"로
-      // dmg/exe를 만들기만 하고 업로드하지 않아 릴리스가 생성되지 않는다.
+      // 자동 업데이트). 검토 후 수동 공개로 바꾸려면 draft:true로.
       name: '@electron-forge/publisher-github',
       config: {
         repository: { owner: 'madcamp-official', name: '26s-w2-c2-03' },
