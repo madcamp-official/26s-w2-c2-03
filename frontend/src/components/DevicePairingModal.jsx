@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchDevices, removeDevice, renameDevice, requestPairingCode } from '../api.js';
 
 function formatCountdown(sec) {
@@ -18,6 +18,9 @@ export default function DevicePairingModal({ onClose }) {
 
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  // 코드를 발급하는 순간의 연동 기기 수를 기억해뒀다가, 폴링 중 그 수가
+  // 늘어나면(=폰에서 코드 입력 성공) 자동으로 모달을 닫는다.
+  const baselineDeviceCountRef = useRef(0);
 
   function loadDevices() {
     fetchDevices()
@@ -41,6 +44,7 @@ export default function DevicePairingModal({ onClose }) {
     setCodeLoading(true);
     try {
       const { code, expiresInSec } = await requestPairingCode();
+      baselineDeviceCountRef.current = devices ? devices.length : 0;
       setCode(code);
       setRemainingSec(expiresInSec);
     } catch (err) {
@@ -49,6 +53,27 @@ export default function DevicePairingModal({ onClose }) {
       setCodeLoading(false);
     }
   }
+
+  const expired = code && remainingSec === 0;
+
+  // 코드가 떠 있는 동안 짧은 주기로 기기 목록을 확인해서, 폰에서 코드를
+  // 입력해 연동에 성공하는 순간(기기 수 증가) 이 창을 자동으로 닫는다.
+  useEffect(() => {
+    if (!code || expired) return undefined;
+    const timer = setInterval(async () => {
+      try {
+        const { devices: latest } = await fetchDevices();
+        setDevices(latest);
+        if (latest.length > baselineDeviceCountRef.current) {
+          clearInterval(timer);
+          onClose();
+        }
+      } catch {
+        // 폴링 실패는 조용히 다음 tick에 재시도
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [code, expired, onClose]);
 
   async function handleRename(id) {
     if (!editingName.trim()) return;
@@ -69,8 +94,6 @@ export default function DevicePairingModal({ onClose }) {
       setDevicesError(err.message);
     }
   }
-
-  const expired = code && remainingSec === 0;
 
   return (
     <div className="focus-modal-backdrop" onClick={onClose}>
