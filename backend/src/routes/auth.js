@@ -10,9 +10,22 @@ const router = Router();
 const CODE_TTL_MIN = 10;
 const APP_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
 const API_URL = process.env.API_BASE_URL || 'http://localhost:4000';
-// 모바일 앱(Expo)이 등록하는 커스텀 URL 스킴 — OAuth 콜백에서 웹 프론트
-// 대신 이리로 돌려보내면 앱이 그 딥링크를 가로채 토큰을 읽는다.
-const MOBILE_SCHEME = 'zonemate://auth-callback';
+
+// 모바일 클라이언트가 보낸 실제 딥링크 주소를 state에 실어 콜백까지 왕복시킨다.
+// Expo Go에서 실행 중일 때는 app.json의 커스텀 스킴(zonemate://)이 아니라
+// exp://<lan-ip>:8081/--/auth-callback 같은 주소가 실제 딥링크이기 때문에,
+// 고정된 스킴을 하드코딩하면 Expo Go에서는 "주소가 유효하지 않음" 에러가 난다.
+function encodeMobileState(redirectUrl) {
+  return `mobile:${Buffer.from(redirectUrl, 'utf8').toString('base64url')}`;
+}
+function decodeMobileState(state) {
+  if (!state || !state.startsWith('mobile:')) return null;
+  try {
+    return Buffer.from(state.slice('mobile:'.length), 'base64url').toString('utf8');
+  } catch {
+    return null;
+  }
+}
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -147,7 +160,9 @@ router.get('/google', (req, res) => {
     response_type: 'code',
     scope: 'openid email profile',
     prompt: 'select_account',
-    ...(req.query.platform === 'mobile' ? { state: 'mobile' } : {}),
+    ...(req.query.platform === 'mobile' && req.query.redirect_uri
+      ? { state: encodeMobileState(req.query.redirect_uri) }
+      : {}),
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
@@ -178,13 +193,15 @@ router.get('/google/callback', async (req, res) => {
 
     const user = upsertOAuthUser({ provider: 'google', providerId: profile.sub, email: profile.email });
     const token = setSessionCookie(res, user.id);
-    if (req.query.state === 'mobile') {
-      return res.redirect(`${MOBILE_SCHEME}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) {
+      return res.redirect(`${mobileRedirect}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
     }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
     console.error(err);
-    if (req.query.state === 'mobile') return res.redirect(`${MOBILE_SCHEME}?error=google`);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) return res.redirect(`${mobileRedirect}?error=google`);
     res.redirect(`${APP_URL}/login?error=google`);
   }
 });
@@ -196,7 +213,9 @@ router.get('/kakao', (req, res) => {
     client_id: process.env.KAKAO_REST_API_KEY,
     redirect_uri: `${API_URL}/api/auth/kakao/callback`,
     response_type: 'code',
-    ...(req.query.platform === 'mobile' ? { state: 'mobile' } : {}),
+    ...(req.query.platform === 'mobile' && req.query.redirect_uri
+      ? { state: encodeMobileState(req.query.redirect_uri) }
+      : {}),
   });
   res.redirect(`https://kauth.kakao.com/oauth/authorize?${params}`);
 });
@@ -228,13 +247,15 @@ router.get('/kakao/callback', async (req, res) => {
 
     const user = upsertOAuthUser({ provider: 'kakao', providerId: String(profile.id), email });
     const token = setSessionCookie(res, user.id);
-    if (req.query.state === 'mobile') {
-      return res.redirect(`${MOBILE_SCHEME}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) {
+      return res.redirect(`${mobileRedirect}?token=${token}&nickname=${encodeURIComponent(user.nickname || '')}`);
     }
     res.redirect(user.nickname ? APP_URL : `${APP_URL}/nickname`);
   } catch (err) {
     console.error(err);
-    if (req.query.state === 'mobile') return res.redirect(`${MOBILE_SCHEME}?error=kakao`);
+    const mobileRedirect = decodeMobileState(req.query.state);
+    if (mobileRedirect) return res.redirect(`${mobileRedirect}?error=kakao`);
     res.redirect(`${APP_URL}/login?error=kakao`);
   }
 });

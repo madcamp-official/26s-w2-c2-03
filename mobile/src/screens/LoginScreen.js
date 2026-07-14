@@ -9,9 +9,9 @@ import { useAuth } from '../auth/AuthContext';
 // 카카오/구글 콜백이 zonemate://auth-callback?token=...으로 돌아오면
 // openAuthSessionAsync가 그 딥링크를 결과로 돌려준다 — 새 창/시스템 브라우저를
 // 거치지 않고 앱 안에서 인증 세션이 끝난다.
-async function completeOAuth(startUrl, signIn) {
+async function completeOAuth(buildStartUrl, signIn) {
   const redirectUrl = Linking.createURL('auth-callback');
-  const result = await WebBrowser.openAuthSessionAsync(startUrl, redirectUrl);
+  const result = await WebBrowser.openAuthSessionAsync(buildStartUrl(redirectUrl), redirectUrl);
   if (result.type !== 'success' || !result.url) return;
 
   const { queryParams } = Linking.parse(result.url);
@@ -48,7 +48,7 @@ export default function LoginScreen({ navigation }) {
   async function handleOAuth(provider) {
     setOauthLoading(provider);
     try {
-      await completeOAuth(provider === 'kakao' ? kakaoLoginUrl() : googleLoginUrl(), signIn);
+      await completeOAuth(provider === 'kakao' ? kakaoLoginUrl : googleLoginUrl, signIn);
     } catch {
       Alert.alert('로그인 실패', '다시 시도해주세요.');
     } finally {

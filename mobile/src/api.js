@@ -27,10 +27,14 @@ export const fetchMe = () => request('/api/auth/me');
 export const setNickname = (nickname) => request('/api/auth/nickname', { method: 'POST', body: { nickname } });
 
 // 카카오/구글은 서버 리다이렉트 플로우라 브라우저 세션(expo-web-browser)에서
-// 열 URL만 필요하다 — ?platform=mobile을 주면 콜백이 zonemate:// 딥링크로
-// 토큰을 실어 돌아온다(backend/src/routes/auth.js 참고).
-export const kakaoLoginUrl = () => `${API_BASE_URL}/api/auth/kakao?platform=mobile`;
-export const googleLoginUrl = () => `${API_BASE_URL}/api/auth/google?platform=mobile`;
+// 열 URL만 필요하다 — redirectUrl(Linking.createURL 결과)을 그대로 넘겨야
+// 콜백이 정확한 딥링크로 토큰을 실어 돌아온다. Expo Go에서는 이 값이
+// zonemate:// 가 아니라 exp://<lan-ip>:8081/--/auth-callback 형태라
+// 서버에 고정 스킴으로 하드코딩할 수 없다(backend/src/routes/auth.js 참고).
+export const kakaoLoginUrl = (redirectUrl) =>
+  `${API_BASE_URL}/api/auth/kakao?platform=mobile&redirect_uri=${encodeURIComponent(redirectUrl)}`;
+export const googleLoginUrl = (redirectUrl) =>
+  `${API_BASE_URL}/api/auth/google?platform=mobile&redirect_uri=${encodeURIComponent(redirectUrl)}`;
 
 // ---- 기기 연동 ----
 export const pairDevice = ({ code, name, platform }) => request('/api/devices/pair', { method: 'POST', body: { code, name, platform } });
