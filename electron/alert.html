@@ -111,6 +111,9 @@
         } else if (alert.type === 'resume_confirm') {
           card.classList.remove('is-overfocus');
           kickerEl.textContent = '복귀 확인';
+        } else if (alert.type === 'planned_break') {
+          card.classList.remove('is-overfocus');
+          kickerEl.textContent = '계획표 · 휴식 시간';
         } else {
           card.classList.remove('is-overfocus');
           kickerEl.textContent = '이탈 신호';
@@ -137,7 +140,12 @@
           btn.textContent = action.label;
           if (action.primary) btn.classList.add('primary');
           btn.addEventListener('click', () => {
-            window.zonemateAlert.sendAction({ alertType: alert.type, actionId: action.id });
+            window.zonemateAlert.sendAction({
+              alertType: alert.type,
+              actionId: action.id,
+              minutes: action.minutes,
+              taskId: action.taskId,
+            });
           });
           actionsEl.appendChild(btn);
         }

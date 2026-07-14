@@ -645,6 +645,105 @@ const focusSession = {
   pageLabel: null, // 알림에 보여줄 사람이 읽기 좋은 페이지 이름
 };
 
+let plannedBreakTimer = null;
+let plannedBreakSchedule = { tasks: [], dayEndDate: null };
+const notifiedPlannedBreaks = new Set();
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function plannedBreakStart(task, dayEndDate, now) {
+  if (!/^\d{2}:\d{2}$/.test(task.startTime || '')) return null;
+  const [hour, minute] = task.startTime.split(':').map(Number);
+  if (hour > 23 || minute > 59) return null;
+
+  const start = new Date(now);
+  start.setHours(hour, minute, 0, 0);
+  // 자정을 넘기는 계획에서 00~05시 휴식은 계획 종료일에 속한다.
+  if (hour < 6 && /^\d{4}-\d{2}-\d{2}$/.test(dayEndDate || '') && dayEndDate > localDateKey(now)) {
+    const [year, month, day] = dayEndDate.split('-').map(Number);
+    start.setFullYear(year, month - 1, day);
+  }
+  return start;
+}
+
+function showPlannedBreakAlert(task) {
+  const minutes = Math.max(1, Number(task.targetMinutes) || 5);
+  const canStartBreak = focusSession.status === 'focusing';
+  showFocusAlert({
+    type: 'planned_break',
+    title: `${task.title || '휴식'} 시간이에요`,
+    message: `계획표대로 ${minutes}분 동안 잠깐 쉬어가세요.`,
+    actions: canStartBreak
+      ? [
+        { id: 'start_planned_break', label: '휴식 시작', primary: true, minutes, taskId: task.id },
+        { id: 'dismiss', label: '나중에' },
+      ]
+      : [{ id: 'dismiss', label: '확인', primary: true }],
+  });
+}
+
+function schedulePlannedBreakCheck() {
+  if (plannedBreakTimer) clearTimeout(plannedBreakTimer);
+  plannedBreakTimer = null;
+
+  const now = new Date();
+  const today = localDateKey(now);
+  // 이전 날짜의 중복 방지 키는 계속 들고 있을 필요가 없다.
+  for (const key of notifiedPlannedBreaks) {
+    if (!key.startsWith(`${today}:`) && !key.startsWith(`${plannedBreakSchedule.dayEndDate}:`)) {
+      notifiedPlannedBreaks.delete(key);
+    }
+  }
+
+  const candidates = plannedBreakSchedule.tasks
+    .filter((task) => task?.type === 'break' && !task.done && task.startTime)
+    .map((task) => {
+      const start = plannedBreakStart(task, plannedBreakSchedule.dayEndDate, now);
+      const durationMs = Math.max(1, Number(task.targetMinutes) || 5) * 60 * 1000;
+      const key = start ? `${localDateKey(start)}:${task.id}:${task.startTime}` : null;
+      return { task, start, end: start ? new Date(start.getTime() + durationMs) : null, key };
+    })
+    .filter((item) => item.start && item.key && !notifiedPlannedBreaks.has(item.key));
+
+  const due = candidates
+    .filter((item) => item.start <= now && now < item.end)
+    .sort((a, b) => a.start - b.start);
+  if (due.length > 0) {
+    due.forEach((item) => notifiedPlannedBreaks.add(item.key));
+    showPlannedBreakAlert(due[0].task);
+  }
+
+  const next = candidates
+    .filter((item) => item.start > now)
+    .sort((a, b) => a.start - b.start)[0];
+  if (next) {
+    plannedBreakTimer = setTimeout(schedulePlannedBreakCheck, Math.max(50, next.start - now + 50));
+  }
+}
+
+function syncPlannedBreaks(payload) {
+  const tasks = Array.isArray(payload?.tasks)
+    ? payload.tasks.map((task) => ({
+      id: String(task?.id || ''),
+      type: task?.type,
+      title: typeof task?.title === 'string' ? task.title.slice(0, 80) : '',
+      startTime: task?.startTime,
+      targetMinutes: task?.targetMinutes,
+      done: Boolean(task?.done),
+    }))
+    : [];
+  plannedBreakSchedule = {
+    tasks,
+    dayEndDate: typeof payload?.dayEndDate === 'string' ? payload.dayEndDate : null,
+  };
+  schedulePlannedBreakCheck();
+}
+
 // URL/제목만으로 플랫폼·콘텐츠 종류를 규칙 기반으로 알아낸다(LLM 호출 없이
 // 즉시 계산 — 알림 문구에 쓸 라벨은 매 tick 필요할 수 있어 지연이 있으면 안 됨).
 // "관련 있는지"는 LLM(classifyPageProductivity)이 판단하고, 이 함수는 오직
@@ -1571,6 +1670,13 @@ ipcMain.on('alert-action', (event, action) => {
 
   const win = BrowserWindow.fromWebContents(event.sender);
 
+  if (action.actionId === 'start_planned_break') {
+    const minutes = Math.max(1, Math.min(180, Number(action.minutes) || 5));
+    if (focusSession.status === 'focusing') startBreak(minutes);
+    if (win && !win.isDestroyed()) win.close();
+    return;
+  }
+
   if (action.actionId === 'return') {
     // 알림 창을 먼저 닫고(닫으면 macOS가 직전 활성 앱=딴짓하던 앱으로 포커스를
     // 되돌리려 하므로), 살짝 뒤에 집중 앱을 활성화해서 그쪽이 최종적으로 이기게
@@ -1721,8 +1827,14 @@ app.on('window-all-closed', () => {
   }
 });
 
+ipcMain.on('sync-planned-breaks', (_event, payload) => syncPlannedBreaks(payload));
+
 app.on('before-quit', () => {
   isQuitting = true;
+  if (plannedBreakTimer) {
+    clearTimeout(plannedBreakTimer);
+    plannedBreakTimer = null;
+  }
   if (tray) {
     tray.destroy();
     tray = null;

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('zonemate', {
   dismissFocusSummary: () => ipcRenderer.send('dismiss-focus-summary'),
   startBreak: (minutes) => ipcRenderer.send('start-break', minutes),
   resumeFocus: () => ipcRenderer.send('resume-focus'),
+  syncPlannedBreaks: (payload) => ipcRenderer.send('sync-planned-breaks', payload),
 
   // 현재 집중 상태 스냅샷 1회 조회
   getState: () => ipcRenderer.invoke('get-focus-state'),

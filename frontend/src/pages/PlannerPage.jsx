@@ -121,6 +121,13 @@ export default function PlannerPage() {
     return () => clearTimeout(timer);
   }, [tasks, events, dayEndTime, dayEndDate, dataReady]);
 
+  // 계획표의 휴식 시작 시각을 Electron 메인 프로세스에 넘겨, 창이 최소화돼도
+  // 정확한 시각에 알림을 띄울 수 있게 한다. 웹에서는 브리지가 없어 no-op이다.
+  useEffect(() => {
+    if (!dataReady || !isDesktop) return;
+    window.zonemate?.syncPlannedBreaks?.({ tasks, dayEndDate });
+  }, [dataReady, isDesktop, tasks, dayEndDate]);
+
   // 하루 마무리 시간 + 유예시간이 지났는지 주기적으로 확인해서, 지났으면
   // 오늘의 계획을 캘린더 기록으로 넘기고 새 하루를 시작할 수 있게 비운다.
   useEffect(() => {
