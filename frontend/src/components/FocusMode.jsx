@@ -56,74 +56,31 @@ function Stat({ label, value, tone }) {
   );
 }
 
-// 다른 기기(모바일)가 시작한 집중을 따라 보여주는 화면. 이 기기는 앱을 추적
-// 하지 않아 집중력 게이지/이탈 통계는 없지만, 데스크톱 집중 화면과 같은
-// 구성(상태 pill·마스코트·링·큰 타이머)으로 보여준다. 링은 집중력 대신 목표
-// 대비 진행률을 나타낸다.
-function MirrorFocusMode({ state, now, controls }) {
-  const onBreak = state.status === 'onBreak';
-  const statusTone = onBreak ? 'break' : 'focus';
-  const statusText = onBreak ? '휴식 중' : '집중 중';
-  const catFill = `var(--cat-${statusTone})`;
-  const elapsedMs = state.sessionStartedAt ? Math.max(0, now - state.sessionStartedAt) : 0;
-  const target = state.targetMinutes;
-  const progress = target ? Math.min(100, Math.round((elapsedMs / (target * 60000)) * 100)) : null;
-
-  return (
-    <div className={`focus-mode tone-${statusTone}`}>
-      <div className="focus-mode-inner">
-        <div className={`focus-status-pill tone-${statusTone}`}>
-          <span className="dot" />
-          {statusText}
-        </div>
-
-        <div className="focus-mascot">
-          <CatFace className="mascot-idle" fill={catFill} />
-        </div>
-
-        {state.taskTitle && (
-          <div className="focus-current-task">
-            <span className="focus-current-task-kicker">지금 하는 일</span>
-            <span className="focus-current-task-title">{state.taskTitle}</span>
-          </div>
-        )}
-
-        {progress !== null && <GaugeRing value={progress} label="진행" />}
-
-        <div className="focus-primary">
-          <div className="focus-primary-value num">{formatDuration(elapsedMs)}</div>
-          <div className="focus-primary-label">
-            경과 시간{target ? ` · 목표 ${target}분` : ''}
-          </div>
-        </div>
-
-        <p className="focus-apps-line hint-text">다른 기기에서 시작한 집중이에요</p>
-
-        <div className="focus-controls">
-          <button type="button" className="btn-danger" onClick={() => controls.stopFocus()}>
-            집중 종료
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// 집중 모드일 때 다른 화면을 전부 덮는 전체화면 대시보드.
+// 집중 모드일 때 다른 화면을 전부 덮는 전체화면 대시보드. 다른 기기(모바일)가
+// 시작한 집중을 미러링할 때도(state.isMirror) 데스크톱 화면을 간소화하지 않고
+// 그대로 이 풀 대시보드로 보여준다 — 이 기기에서 추적한 게이지/이탈/스트릭
+// 데이터가 없는 항목은 세션 경과 시간 기준으로 채워 원래 디자인을 유지한다.
 export default function FocusMode({ state, now, controls }) {
   const [showBreakPicker, setShowBreakPicker] = useState(false);
   const [customMin, setCustomMin] = useState('');
 
-  if (state.isMirror) {
-    return <MirrorFocusMode state={state} now={now} controls={controls} />;
-  }
-
+  const isMirror = Boolean(state.isMirror);
   const onBreak = state.status === 'onBreak';
-  const drifting = Boolean(state.isDrifting);
+  const drifting = !isMirror && Boolean(state.isDrifting);
 
-  const focusStreakMs = state.focusStreakStartedAt ? now - state.focusStreakStartedAt : 0;
+  // 미러링은 앱/입력 추적이 없어 게이지·스트릭·통계 원본이 없다. 세션 시작
+  // 시각 기준 경과 시간으로 "이어서 집중한 시간"과 통계를 채우고, 게이지는
+  // 집중 중을 나타내는 값으로 보여준다(원래 디자인 요소를 모두 유지).
+  const elapsedMs = state.sessionStartedAt ? Math.max(0, now - state.sessionStartedAt) : 0;
+  const focusStreakMs = isMirror
+    ? elapsedMs
+    : (state.focusStreakStartedAt ? now - state.focusStreakStartedAt : 0);
   const driftMs = state.driftStartedAt ? now - state.driftStartedAt : 0;
   const breakRemainingMs = onBreak && state.breakEndsAt ? state.breakEndsAt - now : 0;
+  const gaugeValue = isMirror ? 100 : state.gauge;
+  const totalFocusMs = isMirror ? elapsedMs : (state.totalFocusMs || 0);
+  const totalBreakMs = isMirror ? 0 : (state.totalBreakMs || 0);
+  const totalDriftMs = isMirror ? 0 : (state.totalDriftMs || 0);
 
   const focusAppNames = (state.focusApps || []).map((a) => a.name).join(', ');
 
@@ -162,7 +119,7 @@ export default function FocusMode({ state, now, controls }) {
           </div>
         )}
 
-        <GaugeRing value={onBreak ? state.gauge : state.gauge} />
+        <GaugeRing value={gaugeValue} />
 
         <div className="focus-primary">
           {onBreak ? (
@@ -183,7 +140,11 @@ export default function FocusMode({ state, now, controls }) {
           )}
         </div>
 
-        {focusAppNames && (
+        {isMirror ? (
+          <p className="focus-apps-line hint-text">
+            다른 기기에서 시작한 집중{state.targetMinutes ? ` · 목표 ${state.targetMinutes}분` : ''}
+          </p>
+        ) : focusAppNames && (
           <p className="focus-apps-line hint-text">
             집중 대상: {focusAppNames}
             {state.targetMinutes ? ` · 목표 ${state.targetMinutes}분` : ''}
@@ -191,18 +152,18 @@ export default function FocusMode({ state, now, controls }) {
         )}
 
         <div className="focus-stats">
-          <Stat label="총 집중 시간" value={formatDuration(state.totalFocusMs || 0)} tone="focus" />
-          <Stat label="총 휴식 시간" value={formatDuration(state.totalBreakMs || 0)} tone="break" />
-          <Stat label="딴짓한 시간" value={formatDuration(state.totalDriftMs || 0)} tone="drift" />
+          <Stat label="총 집중 시간" value={formatDuration(totalFocusMs)} tone="focus" />
+          <Stat label="총 휴식 시간" value={formatDuration(totalBreakMs)} tone="break" />
+          <Stat label="딴짓한 시간" value={formatDuration(totalDriftMs)} tone="drift" />
           <Stat
             label="최근 복귀 소요"
-            value={state.lastReturnMs != null ? formatDuration(state.lastReturnMs) : '—'}
+            value={!isMirror && state.lastReturnMs != null ? formatDuration(state.lastReturnMs) : '—'}
           />
-          <Stat label="벗어난 횟수" value={`${state.driftCount || 0}회`} />
+          <Stat label="벗어난 횟수" value={`${isMirror ? 0 : (state.driftCount || 0)}회`} />
         </div>
 
         <div className="focus-controls">
-          {onBreak ? (
+          {isMirror ? null : onBreak ? (
             <button type="button" className="btn-primary" onClick={() => controls.resumeFocus()}>
               집중 재개
             </button>
