@@ -19,7 +19,7 @@ function gaugeColor(value) {
   return 'var(--urgent)';
 }
 
-function GaugeRing({ value }) {
+function GaugeRing({ value, label = '집중력' }) {
   const size = 200;
   const stroke = 16;
   const r = (size - stroke) / 2;
@@ -42,7 +42,7 @@ function GaugeRing({ value }) {
         style={{ transition: 'stroke-dasharray 0.6s ease, stroke 0.6s ease' }}
       />
       <text x="50%" y="47%" textAnchor="middle" className="gauge-value num">{value}</text>
-      <text x="50%" y="62%" textAnchor="middle" className="gauge-label">집중력</text>
+      <text x="50%" y="62%" textAnchor="middle" className="gauge-label">{label}</text>
     </svg>
   );
 }
@@ -56,22 +56,29 @@ function Stat({ label, value, tone }) {
   );
 }
 
-// 다른 기기(모바일)가 시작한 집중을 따라 보여주는 단순화된 화면 — 이 기기는
-// 앱을 추적하지 않으므로 게이지/이탈 통계 없이 지금 하는 일과 경과 시간만 보여준다.
+// 다른 기기(모바일)가 시작한 집중을 따라 보여주는 화면. 이 기기는 앱을 추적
+// 하지 않아 집중력 게이지/이탈 통계는 없지만, 데스크톱 집중 화면과 같은
+// 구성(상태 pill·마스코트·링·큰 타이머)으로 보여준다. 링은 집중력 대신 목표
+// 대비 진행률을 나타낸다.
 function MirrorFocusMode({ state, now, controls }) {
   const onBreak = state.status === 'onBreak';
+  const statusTone = onBreak ? 'break' : 'focus';
+  const statusText = onBreak ? '휴식 중' : '집중 중';
+  const catFill = `var(--cat-${statusTone})`;
   const elapsedMs = state.sessionStartedAt ? Math.max(0, now - state.sessionStartedAt) : 0;
+  const target = state.targetMinutes;
+  const progress = target ? Math.min(100, Math.round((elapsedMs / (target * 60000)) * 100)) : null;
 
   return (
-    <div className="focus-mode tone-focus">
+    <div className={`focus-mode tone-${statusTone}`}>
       <div className="focus-mode-inner">
-        <div className="focus-status-pill tone-focus">
+        <div className={`focus-status-pill tone-${statusTone}`}>
           <span className="dot" />
-          {onBreak ? '휴식 중 (모바일)' : '집중 중 (모바일)'}
+          {statusText}
         </div>
 
         <div className="focus-mascot">
-          <CatFace className="mascot-idle" fill="var(--cat-focus)" />
+          <CatFace className="mascot-idle" fill={catFill} />
         </div>
 
         {state.taskTitle && (
@@ -81,18 +88,16 @@ function MirrorFocusMode({ state, now, controls }) {
           </div>
         )}
 
+        {progress !== null && <GaugeRing value={progress} label="진행" />}
+
         <div className="focus-primary">
           <div className="focus-primary-value num">{formatDuration(elapsedMs)}</div>
-          <div className="focus-primary-label">경과 시간</div>
+          <div className="focus-primary-label">
+            경과 시간{target ? ` · 목표 ${target}분` : ''}
+          </div>
         </div>
 
-        {state.targetMinutes ? (
-          <p className="focus-apps-line hint-text">목표 {state.targetMinutes}분</p>
-        ) : null}
-
-        <p className="hint-text" style={{ marginTop: 8 }}>
-          모바일에서 시작한 집중을 따라 보여주는 중이에요. 여기서 멈추면 모바일에서도 같이 끝나요.
-        </p>
+        <p className="focus-apps-line hint-text">다른 기기에서 시작한 집중이에요</p>
 
         <div className="focus-controls">
           <button type="button" className="btn-danger" onClick={() => controls.stopFocus()}>
