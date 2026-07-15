@@ -9,12 +9,12 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "io.zonemate.mobile.mjkim",
+      "bundleIdentifier": "io.zonemate.mobile.jimin",
       "entitlements": {
         "com.apple.developer.family-controls": true
       }
     },
-    "//": "Family Controls 엔타이틀먼트 + SHIELD_ENABLED가 켜진 상태(ios-focus-shield 브랜치). 서명하려면 Family Controls capability를 붙일 수 있는 유료 Apple Developer 계정이 필요하다. 무료 계정으로는 코드사인 단계에서 막힌다.",
+    "//": "Family Controls 엔타이틀먼트 + SHIELD_ENABLED가 켜진 상태(ios-focus-shield 브랜치). 유료 Apple Developer 팀으로만 서명된다. 로컬 서명 빌드: ios/에서 `DEVELOPMENT_TEAM=<팀ID> npx expo run:ios` 또는 xcodebuild에 DEVELOPMENT_TEAM 전달. 번들 ID는 팀마다 고유해야 해서 io.zonemate.mobile.jimin으로 잡아둠(다른 팀이면 새 값으로 바꿀 것).",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
