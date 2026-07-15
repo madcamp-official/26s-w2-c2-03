@@ -26,24 +26,30 @@ function minutesToTime(total) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
-// 한 항목의 시작 시간을 바꾸면, 바뀐 만큼(delta) 그 뒤 항목들의 시작 시간도
-// 같이 밀어준다(뒤로/앞으로). 시작 시간이 없는 뒤 항목은 건드리지 않는다.
-function cascadeStartTime(items, id, newStartTime) {
+// 시작 시각/소요시간이 바뀐 항목의 종료 시각이 다음 항목 시작 시각을 넘을 때만,
+// 실제로 겹친 분량만큼 뒤 항목들을 늦춘다. 빈 시간은 그대로 보존한다.
+function shiftFollowingForOverlap(items, id, patch) {
   const idx = items.findIndex((it) => it.id === id);
   if (idx < 0) return items;
-  const oldStart = parseTimeToMinutes(items[idx].startTime);
-  const newStart = parseTimeToMinutes(newStartTime);
-  // 지우기(빈 값)거나 이전 시작 시간이 없으면 델타 계산 불가 → 해당 항목만 변경
-  if (newStart === null || oldStart === null) {
-    return items.map((it) => (it.id === id ? { ...it, startTime: newStartTime || undefined } : it));
+
+  const updatedItem = { ...items[idx], ...patch };
+  if (Object.prototype.hasOwnProperty.call(patch, 'startTime') && !patch.startTime) {
+    updatedItem.startTime = undefined;
   }
-  const delta = newStart - oldStart;
-  return items.map((it, i) => {
-    if (i === idx) return { ...it, startTime: newStartTime };
-    if (i > idx && delta !== 0) {
+  const updatedItems = items.map((it, i) => (i === idx ? updatedItem : it));
+  const start = parseTimeToMinutes(updatedItem.startTime);
+  const duration = Math.max(1, Number(updatedItem.targetMinutes) || 1);
+  const nextStart = parseTimeToMinutes(updatedItems[idx + 1]?.startTime);
+  if (start === null || nextStart === null) return updatedItems;
+
+  const overlapMinutes = Math.max(0, start + duration - nextStart);
+  if (overlapMinutes === 0) return updatedItems;
+
+  return updatedItems.map((it, i) => {
+    if (i > idx) {
       const t = parseTimeToMinutes(it.startTime);
       if (t === null) return it;
-      return { ...it, startTime: minutesToTime(t + delta) };
+      return { ...it, startTime: minutesToTime(t + overlapMinutes) };
     }
     return it;
   });
@@ -128,9 +134,12 @@ export default function DailyPlanner({ items, onItemsChange, dayEndTime, onDayEn
   }
 
   function updateItem(id, patch) {
-    // 시작 시간 변경은 뒤 항목들도 같이 미루도록 cascade 처리한다.
-    if (Object.prototype.hasOwnProperty.call(patch, 'startTime')) {
-      onItemsChange((prev) => cascadeStartTime(prev, id, patch.startTime));
+    // 시작 시간이나 소요시간 변경으로 다음 일정과 겹치면 겹친 만큼만 뒤로 민다.
+    if (
+      Object.prototype.hasOwnProperty.call(patch, 'startTime')
+      || Object.prototype.hasOwnProperty.call(patch, 'targetMinutes')
+    ) {
+      onItemsChange((prev) => shiftFollowingForOverlap(prev, id, patch));
       return;
     }
     onItemsChange((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
