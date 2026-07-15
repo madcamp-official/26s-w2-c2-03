@@ -38,6 +38,8 @@ export function FocusSessionProvider({ children }) {
   const driftingRef = useRef(false);
   const driftMsRef = useRef(0);
   const driftCountRef = useRef(0);
+  // 차단막(shield)이 지금 적용돼 있는지. 세션 활성 여부에 따라 켜고 끈다.
+  const shieldOnRef = useRef(false);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -106,6 +108,20 @@ export function FocusSessionProvider({ children }) {
     return () => sub.remove();
   }, []);
 
+  // 집중 세션이 활성이면(내가 시작했든 데스크톱을 미러링한 것이든) 앱 차단막을
+  // 씌우고, idle로 돌아가면 해제한다. 예전엔 startFocus에서만 켜서, 데스크톱에서
+  // 시작한 세션이 폰에 미러링됐을 땐 차단이 안 걸렸다(iOS 개발 빌드 전용, 그 외 no-op).
+  useEffect(() => {
+    const shouldShield = Boolean(session.status && session.status !== 'idle');
+    if (shouldShield && !shieldOnRef.current) {
+      shieldOnRef.current = true;
+      startShield();
+    } else if (!shouldShield && shieldOnRef.current) {
+      shieldOnRef.current = false;
+      stopShield();
+    }
+  }, [session.status]);
+
   const startFocus = useCallback(async ({ taskTitle, targetMinutes }) => {
     const title = (taskTitle || '').trim();
     if (!title) return;
@@ -125,10 +141,8 @@ export function FocusSessionProvider({ children }) {
         source: 'mobile', gauge: null, currentState: 'focus', startedAt,
       });
       // 낙관적 반영 — 다음 폴링을 기다리지 않고 바로 오버레이가 뜨게.
+      // (차단막은 session.status 변화를 감지하는 위 useEffect가 씌운다.)
       setSession({ status: 'focusing', taskTitle: title, targetMinutes: minutes, source: 'mobile', startedAt });
-      // Forest식 앱 차단 — 미리 고른 앱들에 차단막을 씌운다(iOS 개발 빌드 전용,
-      // 그 외 환경에선 no-op). 선택한 앱이 없으면 아무 일도 안 한다.
-      startShield();
       logFocusEvent(sessionId, 'session_start', { taskTitle: title, source: 'mobile' });
     } finally {
       setBusy(false);
@@ -175,8 +189,8 @@ export function FocusSessionProvider({ children }) {
       focusSessionIdRef.current = null;
       driftingRef.current = false;
       await stopFocusSessionRemote();
+      // 차단막 해제는 session.status가 idle로 바뀌는 걸 감지하는 useEffect가 처리.
       setSession({ status: 'idle' });
-      stopShield(); // 차단막 해제
     } finally {
       setBusy(false);
     }
