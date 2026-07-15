@@ -18,10 +18,14 @@ export default function FocusSummary() {
   const { summary, dismissSummary } = useFocusSession();
   if (!summary) return null;
 
-  const totalMin = Math.round(summary.totalMs / 60000);
+  // 앱을 벗어난 시간(딴짓)은 집중에서 뺀다. 목표 달성도 실제 집중 시간 기준.
+  const focusMs = summary.focusMs ?? summary.totalMs;
+  const driftMs = summary.driftMs ?? 0;
+  const driftCount = summary.driftCount ?? 0;
+  const totalMin = Math.round(focusMs / 60000);
   const target = summary.targetMinutes;
-  const achieved = target ? summary.totalMs >= target * 60000 : null;
-  const progressPct = target ? Math.min(100, Math.round((summary.totalMs / (target * 60000)) * 100)) : 0;
+  const achieved = target ? focusMs >= target * 60000 : null;
+  const progressPct = target ? Math.min(100, Math.round((focusMs / (target * 60000)) * 100)) : 0;
 
   const headline = achieved === null
     ? '집중 완료!'
@@ -43,8 +47,10 @@ export default function FocusSummary() {
         ) : null}
 
         <View style={styles.bigStat}>
-          <Text style={styles.bigValue}>{formatDuration(summary.totalMs)}</Text>
-          <Text style={styles.bigLabel}>총 집중 시간</Text>
+          <Text style={styles.bigValue}>{formatDuration(focusMs)}</Text>
+          <Text style={styles.bigLabel}>
+            집중 시간{driftMs > 0 ? ` · 총 경과 ${formatDuration(summary.totalMs)}` : ''}
+          </Text>
         </View>
 
         {target ? (
@@ -61,8 +67,17 @@ export default function FocusSummary() {
           </View>
         ) : null}
 
+        {driftCount > 0 ? (
+          <View style={styles.driftCard}>
+            <Text style={styles.driftValue}>딴짓 {driftCount}회 · {formatDuration(driftMs)}</Text>
+            <Text style={styles.driftLabel}>집중 중 앱을 벗어난 시간이에요</Text>
+          </View>
+        ) : (
+          <Text style={styles.cleanText}>집중하는 동안 앱을 벗어나지 않았어요 👏</Text>
+        )}
+
         <Text style={styles.note}>
-          이탈·집중력 그래프는 앱 추적이 되는 데스크톱에서 볼 수 있어요.
+          모바일은 앱을 벗어난 시간을 딴짓으로 봐요. 앱별 이탈·집중력 곡선은 데스크톱에서 볼 수 있어요.
         </Text>
 
         <Pressable style={styles.button} onPress={dismissSummary}>
@@ -94,6 +109,13 @@ const styles = StyleSheet.create({
   barTrack: { height: 8, borderRadius: 4, backgroundColor: colors.surface2, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: 4, backgroundColor: colors.text2 },
   barFillDone: { backgroundColor: colors.signal },
+  driftCard: {
+    width: '100%', maxWidth: 340, backgroundColor: colors.surface, borderRadius: 14,
+    borderWidth: 1, borderColor: colors.line, padding: 14, marginBottom: 16, alignItems: 'center',
+  },
+  driftValue: { fontSize: 16, fontWeight: '800', color: colors.text1 },
+  driftLabel: { fontSize: 12, color: colors.text2, marginTop: 3 },
+  cleanText: { fontSize: 13.5, fontWeight: '600', color: colors.signal, textAlign: 'center', marginBottom: 16 },
   note: { fontSize: 12, color: colors.text2, textAlign: 'center', lineHeight: 18, marginBottom: 26, maxWidth: 300 },
   button: { backgroundColor: colors.signal, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 48 },
   buttonLabel: { color: colors.signalInk, fontWeight: '700', fontSize: 14 },

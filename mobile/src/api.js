@@ -55,6 +55,14 @@ export const fetchDailyArchive = (date) => request(`/api/daily-archives/${date}`
 // 그 날의 집중 세션 기록(데스크톱이 추적한 timeline·통계 포함). 데스크톱에서
 // 한 집중을 모바일 캘린더에서 그래프로 보여주는 데 쓴다.
 export const fetchFocusDay = (date) => request(`/api/focus-events/day/${date}`);
+// 집중 세션 이벤트(session_start/drift_start/drift_end/session_end 등)를 남긴다.
+// 모바일은 데스크톱처럼 창 추적을 못 하는 대신, 앱을 벗어난 것(AppState 백그라운드)을
+// 딴짓으로 기록해 캘린더/요약에 반영한다. 실패해도 조용히 넘어간다(부가 기록).
+export const logFocusEvent = (sessionId, type, meta) =>
+  request('/api/focus-events', {
+    method: 'POST',
+    body: { sessionId, clientId: 'zonemate-mobile', type, meta: meta || null },
+  }).catch(() => {});
 
 // ---- 실시간 집중 세션(3단계) ----
 export const fetchFocusSession = () => request('/api/focus-session');
