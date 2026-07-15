@@ -9,9 +9,12 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "io.zonemate.mobile.mjkim"
+      "bundleIdentifier": "io.zonemate.mobile.mjkim",
+      "entitlements": {
+        "com.apple.developer.family-controls": true
+      }
     },
-    "//": "Family Controls 엔타이틀먼트는 무료 계정에서 서명이 안 돼 임시로 뺐다. 유료 Apple Developer 계정이 생기면 ios.entitlements에 'com.apple.developer.family-controls': true 를 다시 넣고, modules/focus-shield/index.ts의 SHIELD_ENABLED를 true로 바꾸면 앱 차단이 켜진다.",
+    "//": "Family Controls 엔타이틀먼트 + SHIELD_ENABLED가 켜진 상태(ios-focus-shield 브랜치). 서명하려면 Family Controls capability를 붙일 수 있는 유료 Apple Developer 계정이 필요하다. 무료 계정으로는 코드사인 단계에서 막힌다.",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

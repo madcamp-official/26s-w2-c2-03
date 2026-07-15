@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# 로컬 Xcode 빌드용 node 경로(머신별)
+.xcode.env.local

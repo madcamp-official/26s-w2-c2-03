@@ -9,7 +9,7 @@ const native = requireOptionalNativeModule<FocusShieldNativeModule>('FocusShield
 // 계정에서 서명이 안 돼, 지금은 엔타이틀먼트를 뺀 채로 기기 테스트를 하므로
 // false로 둔다. 유료 개발자 계정이 생기면 app.json에 엔타이틀먼트를 되살리고
 // 이 값을 true로 바꾸면 차단 UI와 실제 shield가 활성화된다.
-export const SHIELD_ENABLED = false;
+export const SHIELD_ENABLED = true;
 
 interface SelectionSummary {
   apps: number;
