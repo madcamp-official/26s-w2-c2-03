@@ -11,7 +11,6 @@ import FocusOverlay from './src/focus/FocusOverlay';
 import FocusSummary from './src/focus/FocusSummary';
 import { colors } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
-import SignupScreen from './src/screens/SignupScreen';
 import NicknameScreen from './src/screens/NicknameScreen';
 import TodayScreen from './src/screens/TodayScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
@@ -69,10 +68,7 @@ function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
-        <>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
-        </>
+        <Stack.Screen name="Login" component={LoginScreen} />
       ) : !user.nickname ? (
         <Stack.Screen name="Nickname" component={NicknameScreen} />
       ) : (

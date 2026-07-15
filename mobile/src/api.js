@@ -20,9 +20,6 @@ async function request(path, { method = 'GET', body } = {}) {
 }
 
 // ---- 인증 ----
-export const sendVerificationCode = (payload) => request('/api/auth/email/send-code', { method: 'POST', body: payload });
-export const verifyEmailCode = (payload) => request('/api/auth/email/verify', { method: 'POST', body: payload });
-export const login = (payload) => request('/api/auth/login', { method: 'POST', body: payload });
 export const fetchMe = () => request('/api/auth/me');
 export const setNickname = (nickname) => request('/api/auth/nickname', { method: 'POST', body: { nickname } });
 

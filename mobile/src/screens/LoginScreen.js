@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { colors } from '../theme';
-import { login, kakaoLoginUrl, googleLoginUrl } from '../api';
+import { kakaoLoginUrl, googleLoginUrl } from '../api';
 import { useAuth } from '../auth/AuthContext';
 
 // 카카오/구글 콜백이 zonemate://auth-callback?token=...으로 돌아오면
@@ -24,26 +24,9 @@ async function completeOAuth(buildStartUrl, signIn) {
   }
 }
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(null); // 'kakao' | 'google' | null
-
-  async function handleLogin() {
-    setError(null);
-    setLoading(true);
-    try {
-      const { token } = await login({ email, password });
-      await signIn(token);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleOAuth(provider) {
     setOauthLoading(provider);
@@ -83,40 +66,6 @@ export default function LoginScreen({ navigation }) {
             : <Text style={[styles.oauthLabel, { color: colors.text1 }]}>구글로 시작하기</Text>}
         </Pressable>
 
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>또는</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <Text style={styles.fieldLabel}>이메일</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-        />
-        <Text style={styles.fieldLabel}>비밀번호</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          textContentType="password"
-        />
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
-          {loading ? <ActivityIndicator color={colors.signalInk} /> : <Text style={styles.primaryLabel}>로그인</Text>}
-        </Pressable>
-
-        <Pressable onPress={() => navigation.navigate('Signup')}>
-          <Text style={styles.switchText}>
-            계정이 없으신가요? <Text style={{ color: colors.signal, fontWeight: '600' }}>이메일로 가입하기</Text>
-          </Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -136,19 +85,4 @@ const styles = StyleSheet.create({
   oauthButton: { borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginBottom: 8 },
   googleButton: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
   oauthLabel: { fontSize: 14, fontWeight: '600' },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 10 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.line },
-  dividerText: { color: colors.text2, fontSize: 12 },
-  fieldLabel: { fontSize: 11, fontWeight: '600', color: colors.text2, marginTop: 12, marginBottom: 6 },
-  input: {
-    borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingVertical: 10,
-    paddingHorizontal: 12, fontSize: 14, color: colors.text1, backgroundColor: colors.ground,
-  },
-  errorText: { color: colors.urgent, fontSize: 13, marginTop: 10 },
-  primaryButton: {
-    backgroundColor: colors.signal, borderRadius: 12, paddingVertical: 13,
-    alignItems: 'center', marginTop: 18,
-  },
-  primaryLabel: { color: colors.signalInk, fontWeight: '700', fontSize: 14 },
-  switchText: { textAlign: 'center', marginTop: 18, color: colors.text2, fontSize: 12.5 },
 });

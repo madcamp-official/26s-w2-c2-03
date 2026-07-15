@@ -1,13 +1,11 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import db from '../db.js';
-import { sendVerificationCode } from '../services/email.js';
-import { hashPassword, verifyPassword, issueToken } from '../services/auth.js';
+import { issueToken } from '../services/auth.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 
 const router = Router();
 
-const CODE_TTL_MIN = 10;
 const APP_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
 const API_URL = process.env.API_BASE_URL || 'http://localhost:4000';
 
@@ -59,94 +57,6 @@ function upsertOAuthUser({ provider, providerId, email }) {
   ).run(id, email, provider, providerId);
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 }
-
-// ---- 이메일 회원가입 (이메일/비번/비번확인 입력 -> 인증코드 발송 -> 코드 확인 시 계정 생성) ----
-
-router.post('/email/send-code', async (req, res) => {
-  const { email, password, passwordConfirm } = req.body;
-
-  if (!email || !password || !passwordConfirm) {
-    return res.status(400).json({ error: '이메일과 비밀번호를 모두 입력해주세요' });
-  }
-  if (password !== passwordConfirm) {
-    return res.status(400).json({ error: '비밀번호가 서로 달라요' });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ error: '비밀번호는 8자 이상이어야 해요' });
-  }
-  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
-    return res.status(409).json({ error: '이미 가입된 이메일이에요' });
-  }
-
-  const code = String(crypto.randomInt(100000, 999999));
-  const expiresAt = new Date(Date.now() + CODE_TTL_MIN * 60 * 1000).toISOString();
-
-  db.prepare(
-    `INSERT INTO email_verifications (email, code, password_hash, expires_at, attempts)
-     VALUES (?, ?, ?, ?, 0)
-     ON CONFLICT(email) DO UPDATE SET
-       code = excluded.code, password_hash = excluded.password_hash,
-       expires_at = excluded.expires_at, attempts = 0`
-  ).run(email, code, hashPassword(password), expiresAt);
-
-  let result;
-  try {
-    result = await sendVerificationCode(email, code);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: '인증 메일 전송에 실패했어요. 잠시 후 다시 시도해주세요.' });
-  }
-
-  // 이메일 provider 미설정(개발 모드)일 때만 devCode를 내려줘서 화면에서
-  // 바로 진행할 수 있게 한다. 실제 발송된 경우에는 코드를 노출하지 않는다.
-  const body = { ok: true };
-  if (result && result.delivered === false) body.devCode = result.devCode;
-  res.json(body);
-});
-
-router.post('/email/verify', (req, res) => {
-  const { email, code } = req.body;
-  if (!email || !code) {
-    return res.status(400).json({ error: '인증번호를 입력해주세요' });
-  }
-
-  const pending = db.prepare('SELECT * FROM email_verifications WHERE email = ?').get(email);
-  if (!pending) {
-    return res.status(400).json({ error: '인증 요청을 먼저 해주세요' });
-  }
-  if (new Date(pending.expires_at) < new Date()) {
-    return res.status(400).json({ error: '인증번호가 만료됐어요. 다시 받아주세요' });
-  }
-  if (pending.attempts >= 5) {
-    return res.status(429).json({ error: '시도 횟수를 초과했어요. 다시 받아주세요' });
-  }
-  if (pending.code !== code) {
-    db.prepare('UPDATE email_verifications SET attempts = attempts + 1 WHERE email = ?').run(email);
-    return res.status(400).json({ error: '인증번호가 일치하지 않아요' });
-  }
-
-  const id = crypto.randomUUID();
-  db.prepare(
-    `INSERT INTO users (id, email, password_hash, provider, email_verified) VALUES (?, ?, ?, 'email', 1)`
-  ).run(id, email, pending.password_hash);
-  db.prepare('DELETE FROM email_verifications WHERE email = ?').run(email);
-
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  // 쿠키(웹/데스크톱)에 더해 토큰을 응답 본문에도 실어준다 — 모바일 앱은
-  // 쿠키 대신 이 값을 저장했다가 Authorization 헤더로 보낸다.
-  const token = setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user), token });
-});
-
-router.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-  if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
-    return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않아요' });
-  }
-  const token = setSessionCookie(res, user.id);
-  res.json({ user: toPublicUser(user), token });
-});
 
 // ---- 구글 로그인 ----
 // state에 플랫폼을 실어 보내고 콜백에서 그대로 돌려받는다(OAuth 표준

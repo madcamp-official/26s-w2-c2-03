@@ -93,16 +93,6 @@ body {
 .btn-kakao { background: #FEE500; color: #191600; }
 .btn-google { background: var(--surface); border: 1px solid var(--line); color: var(--text-1); }
 
-.auth-divider {
-  display: flex; align-items: center; gap: 10px; margin: 4px 0 18px;
-  color: var(--text-2); font-size: 12px;
-}
-.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-
-.auth-switch { margin-top: 16px; font-size: 13px; color: var(--text-2); text-align: center; }
-.auth-switch a { color: var(--signal); }
-.auth-hint { font-size: 13px; color: var(--text-2); margin: 0 0 4px; }
-
 /* ---- shared section shell ---- */
 .panel { margin-bottom: 40px; }
 .section-head {
@@ -621,14 +611,6 @@ input.day-end-input { width: 132px; flex: none; margin: 0; padding: 8px 10px; }
 }
 .focus-target-unit { font-size: 13px; color: var(--text-2); }
 .focus-target-hint { flex-basis: 100%; margin: 0; font-size: 11.5px; }
-
-/* 개발 모드(이메일 미설정) 인증번호 안내 */
-.dev-code-notice {
-  margin: 10px 0 0; padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
-  color: var(--text-1); background: var(--surface-2);
-  border: 1px dashed var(--signal-dim); border-radius: var(--radius-md);
-}
-.dev-code-notice b { color: var(--signal); letter-spacing: .08em; }
 
 /* ==== 간단한 등장 애니메이션 ==== */
 @keyframes zm-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

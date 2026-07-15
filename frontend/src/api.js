@@ -91,18 +91,6 @@ export function fetchFocusDay(date) {
 
 // ---- auth ----
 
-export function sendVerificationCode({ email, password, passwordConfirm }) {
-  return postJson('/api/auth/email/send-code', { email, password, passwordConfirm });
-}
-
-export function verifyEmailCode({ email, code }) {
-  return postJson('/api/auth/email/verify', { email, code });
-}
-
-export function login({ email, password }) {
-  return postJson('/api/auth/login', { email, password });
-}
-
 export function setNickname(nickname) {
   return postJson('/api/auth/nickname', { nickname });
 }

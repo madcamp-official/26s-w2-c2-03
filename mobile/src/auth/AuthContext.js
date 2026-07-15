@@ -23,9 +23,8 @@ export function AuthProvider({ children }) {
     refresh();
   }, [refresh]);
 
-  // 이메일 로그인/가입은 응답 본문에 토큰이 바로 오지만, 카카오/구글은
-  // 딥링크(zonemate://auth-callback?token=...)로 온다 — 어느 쪽이든
-  // 여기로 토큰만 넘기면 저장하고 사용자 정보를 새로 받아온다.
+  // 카카오/구글 딥링크(zonemate://auth-callback?token=...)로 받은 토큰을
+  // 저장하고 사용자 정보를 새로 받아온다.
   const signIn = useCallback(async (token) => {
     await persistToken(token);
     await refresh();
