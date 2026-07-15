@@ -912,10 +912,18 @@ function accrueStats(now = Date.now()) {
   focusSession.accountedAt = now;
   if (delta <= 0) return;
 
-  if (focusSession.currentState === 'focus') focusSession.totalFocusMs += delta;
-  else if (focusSession.currentState === 'drift') focusSession.totalDriftMs += delta;
-  else if (focusSession.currentState === 'break') focusSession.totalBreakMs += delta;
-  // 'self'(Zonemate 자기 창)/'idle'은 어느 버킷에도 넣지 않는다.
+  // 'self'(Zonemate 자기 창)도 집중 시간으로 함께 흘려보낸다 — 대시보드/설정을
+  // 잠깐 보는 건 이탈이 아니므로, 집중 시간·총 집중 시간이 멈추거나 리셋되지
+  // 않게 한다. 단 게이지(점수)는 pollFocus에서 self일 때 'hold'로 유지되므로,
+  // self 시간이 점수에는 영향을 주지 않는다(사용자 요구: 점수 영향은 그대로).
+  if (focusSession.currentState === 'focus' || focusSession.currentState === 'self') {
+    focusSession.totalFocusMs += delta;
+  } else if (focusSession.currentState === 'drift') {
+    focusSession.totalDriftMs += delta;
+  } else if (focusSession.currentState === 'break') {
+    focusSession.totalBreakMs += delta;
+  }
+  // 'idle'은 어느 버킷에도 넣지 않는다.
 }
 
 // 순간 상태를 바꾼다. 바꾸기 전에 이전 상태 시간을 정산하고, 집중력 게이지도
@@ -1356,13 +1364,14 @@ async function pollFocus() {
       }
 
       // 이탈에서 집중으로 복귀 — 돌아오기까지 걸린 시간을 기록하고 새 집중
-      // streak을 시작한다.
+      // streak을 시작한다. Zonemate 창(self)만 잠깐 봤다가 돌아온 경우엔 이탈이
+      // 아니므로 스트릭을 리셋하지 않는다. 실제 이탈(driftStartedAt이 있음)에서
+      // 복귀했을 때만 새 스트릭을 시작한다 — self→집중 전환에서 "이어서 집중한
+      // 시간"이 0으로 초기화되던 버그 수정.
       if (focusSession.driftStartedAt) {
         finishCurrentDriftDestination(now);
         focusSession.lastReturnMs = now - focusSession.driftStartedAt;
         logFocusEvent('drift_end', { durationMs: focusSession.lastReturnMs });
-      }
-      if (focusSession.currentState !== 'focus') {
         beginFocusStreak(now);
       }
       setCurrentState('focus');

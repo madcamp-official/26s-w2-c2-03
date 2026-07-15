@@ -22,7 +22,7 @@ function navLinkClassName({ isActive }) {
 
 // 하루 마무리 시간이 지나자마자 바로 지워버리면 사용자가 당황할 수 있어서,
 // 이 시간만큼 여유를 두고서야 실제로 초기화한다.
-const CLOSE_GRACE_MINUTES = 30;
+const CLOSE_GRACE_MINUTES = 10;
 
 // John이 "롤토체스 2시간 하고 잠에 들 거야"처럼 밤 시간대에 대화하면
 // dayEndTime이 자정을 넘긴 값(예: "00:40")으로 나올 수 있다. 이걸 무조건

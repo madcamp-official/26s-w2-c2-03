@@ -52,6 +52,9 @@ export const generateDeadlineRoadmap = ({ title, details, deadline }) =>
 // 지난 날짜의 "오늘의 계획" 스냅샷. 오늘 날짜는 planner-data의 라이브 tasks를
 // 쓰고, 그 외 날짜만 이걸로 불러온다(데스크톱 DatePlanEditor와 같은 규칙).
 export const fetchDailyArchive = (date) => request(`/api/daily-archives/${date}`);
+// 그 날의 집중 세션 기록(데스크톱이 추적한 timeline·통계 포함). 데스크톱에서
+// 한 집중을 모바일 캘린더에서 그래프로 보여주는 데 쓴다.
+export const fetchFocusDay = (date) => request(`/api/focus-events/day/${date}`);
 
 // ---- 실시간 집중 세션(3단계) ----
 export const fetchFocusSession = () => request('/api/focus-session');
